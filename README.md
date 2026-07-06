@@ -1,50 +1,133 @@
-# Welcome to your Expo app 👋
+<p align="center">
+  <img src="assets/images/icon.png" width="140" alt="IP Providência"/>
+</p>
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+<h1 align="center">IP Providência</h1>
 
-## Get started
+<p align="center">
+Aplicativo oficial da Igreja Presbiteriana Providência.
+</p>
 
-1. Install dependencies
+<p align="center">
+Deus guia. Deus sustenta. Deus provê.
+</p>
 
-   ```bash
-   npm install
-   ```
+---
 
-2. Start the app
+# Sobre o projeto
 
-   ```bash
-   npx expo start
-   ```
+O **IP Providência** é o aplicativo oficial da Igreja Presbiteriana Providência, desenvolvido para facilitar o acesso às informações, conteúdos e recursos da igreja em um único lugar.
 
-In the output, you'll find options to open the app in a
+O aplicativo oferece uma experiência simples, rápida e intuitiva, permitindo que membros e visitantes acompanhem a vida da igreja de qualquer lugar.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+---
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+# Funcionalidades
 
-## Get a fresh project
+- Boletim semanal
+- Sermões
+- Agenda de eventos
+- Avisos
+- Biblioteca
+- Hinário Novo Cântico
+- Dizimos e Ofertas
+- Como chegar
+- Redes sociais
+- Informações da igreja
 
-When you're ready, run:
+---
 
-```bash
-npm run reset-project
+# Tecnologias
+
+- React Native
+- Expo SDK 54
+- Expo Router
+- TypeScript
+- Firebase
+- React Navigation
+- Expo Notifications
+
+---
+
+# Estrutura do projeto
+
+```text
+app/
+assets/
+components/
+constants/
+hooks/
+services/
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+---
 
-## Learn more
+# Como executar
 
-To learn more about developing your project with Expo, look at the following resources:
+Clone o projeto:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+git clone https://github.com/abcttecnologia/ip-providencia-app.git
+```
 
-## Join the community
+Instale as dependências:
 
-Join our community of developers creating universal apps.
+```bash
+npm install
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Inicie o projeto:
+
+```bash
+npx expo start
+```
+
+---
+
+# Plataformas
+
+- Android
+- iOS
+
+---
+
+# Roadmap
+
+## Versão 1.0
+
+- ✅ Página Inicial
+- ✅ Boletim
+- ✅ Sermões
+- ✅ Agenda
+- ✅ Eventos
+- ✅ Avisos
+- ✅ Biblioteca
+- ✅ Hinário Novo Cântico
+- ✅ Dízimos e Ofertas
+- ✅ Política de Privacidade
+
+## Próximas versões
+
+- ⏳ Painel Administrativo
+- ⏳ Notificações Push
+- ⏳ Área do Membro
+- ⏳ Inscrição em Eventos
+- ⏳ Favoritos no Hinário
+- ⏳ Campanhas
+- ⏳ Área Administrativa Web
+
+---
+
+# Licença
+
+Este projeto foi desenvolvido para uso da **Igreja Presbiteriana Providência**.
+
+A identidade visual, logotipos e demais conteúdos pertencem aos seus respectivos titulares.
+
+---
+
+<p align="center">
+IP Providência
+<br>
+Deus guia. Deus sustenta. Deus provê.
+</p>
