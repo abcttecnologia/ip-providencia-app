@@ -1,0 +1,17 @@
+
+ID                       45413ff8-db4a-490b-aa52-ae421cf16786
+Platform                 Android
+Status                   finished
+Profile                  preview
+Distribution             internal
+SDK Version              54.0.0
+Version                  1.0.0
+Version code             2
+Commit                   c1aa5b9c80cbf338e4b7afc7360c0f44f82ee622
+Logs                     https://expo.dev/accounts/ipprovidencia/projects/ip-providencia-v2/builds/45413ff8-db4a-490b-aa52-ae421cf16786
+Application Archive URL  https://expo.dev/artifacts/eas/iQvpiO7eWGg4qiHbcK-yUsGOY2HJ4Jz_AQ1h3rJqRQg.apk
+Build Artifacts URL      null
+Fingerprint              fa2b8b43de38227fbb12ac0e4778ce4b87758bc1
+Started at               6/22/2026, 6:56:47 PM
+Finished at              6/22/2026, 7:18:56 PM
+Started by               ipprovidencia
