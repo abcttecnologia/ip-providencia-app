@@ -1,4 +1,4 @@
-const API_KEY = 'AIzaSyAnc-Acmcrk9GE1Bv5CoTyTVzvlHlK76pM';
+const API_KEY = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY!;
 
 const CHANNEL_ID = 'UC4HUbWq13CDWveVGGXhNbKA';
 
