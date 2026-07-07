@@ -29,28 +29,24 @@ const titulo = Array.isArray(params.titulo)
   const [erroPlayer, setErroPlayer] = useState('');
 
   useEffect(() => {
-    carregarVideo();
-  }, []);
-
   async function carregarVideo() {
     try {
       if (!videoId) return;
 
       console.log('VIDEO ID:', videoId);
 
-      const video = await getVideoDetails(
-        videoId as string
-      );
+      const video = await getVideoDetails(videoId as string);
 
       console.log('VIDEO:', video);
 
-      setDescricao(
-        video?.snippet?.description ?? ''
-      );
+      setDescricao(video?.snippet?.description ?? '');
     } catch (error) {
       console.log('ERRO:', error);
     }
   }
+
+  carregarVideo();
+}, [videoId]);
 
   return (
     <ScrollView
@@ -97,10 +93,10 @@ const titulo = Array.isArray(params.titulo)
         height={220}
         play={false}
         videoId={videoId as string}
-        onError={(e) => {
-          console.log('YOUTUBE ERROR:', e);
-          setErroPlayer(String(e));
-        }}
+      onError={(e: any) => {
+  console.log('YOUTUBE ERROR:', e);
+  setErroPlayer('Erro ao carregar o vídeo.');
+}}
       />
 
       {erroPlayer ? (

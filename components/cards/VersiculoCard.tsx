@@ -71,15 +71,16 @@ export default function VersiculoCard() {
         {versiculo.titulo}
       </Text>
 
-      <Text
+<Text
         style={{
           fontSize: 14,
           color: '#333',
           lineHeight: 26,
-          fontStyle: 'italic',
         }}
       >
-        "{versiculo.texto}"
+        {""}
+        {versiculo.texto}
+        {""}
       </Text>
 
       <Text

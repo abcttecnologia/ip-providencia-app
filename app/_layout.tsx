@@ -40,12 +40,6 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
-        <Stack.Screen
-          name="hinario"
-          options={{
-            headerShown: false,
-          }}
-        />
 
       </Stack>
 

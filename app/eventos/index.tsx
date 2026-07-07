@@ -1,19 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import {
-    router,
-    Stack,
-    useLocalSearchParams,
+  router,
+  Stack,
+  useLocalSearchParams,
 } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Linking,
-    Pressable,
-    ScrollView,
-    Text,
-    View,
+  ActivityIndicator,
+  Image,
+  Linking,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
 } from 'react-native';
 
 import { getEvento } from '../../services/eventos';
@@ -25,9 +25,6 @@ export default function EventoScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    carregarEvento();
-  }, []);
-
   async function carregarEvento() {
     try {
       const dados = await getEvento(id as string);
@@ -38,6 +35,9 @@ export default function EventoScreen() {
       setLoading(false);
     }
   }
+
+  carregarEvento();
+}, [id]);
 
   async function copiarPix() {
     if (!evento?.pix) return;
