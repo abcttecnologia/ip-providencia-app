@@ -3,9 +3,9 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 
 import {
-    doc,
-    serverTimestamp,
-    setDoc,
+  doc,
+  serverTimestamp,
+  setDoc,
 } from 'firebase/firestore';
 
 import { db } from './firebase';
@@ -47,7 +47,8 @@ export async function registrarNotificacoes() {
       projectId,
     })
   ).data;
-
+  
+try {
   await setDoc(
     doc(db, 'pushTokens', token),
     {
@@ -62,4 +63,8 @@ export async function registrarNotificacoes() {
   );
 
   console.log('Push Token:', token);
+
+} catch (error) {
+  console.log('Não foi possível registrar o Push Token.');
+}
 }

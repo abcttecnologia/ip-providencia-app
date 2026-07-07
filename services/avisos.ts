@@ -1,9 +1,6 @@
-import {
-    collection,
-    getDocs,
-} from 'firebase/firestore';
-
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
+
 
 export async function getAvisos() {
   const snapshot = await getDocs(collection(db, 'Avisos'));
