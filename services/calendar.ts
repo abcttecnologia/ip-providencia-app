@@ -1,11 +1,12 @@
 import { lerCache, salvarCache } from './cache';
+import { ServiceResult } from './types';
 
 const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_CALENDAR_API_KEY!;
 
 const CALENDAR_ID =
   'igrejapresbiterianadonoroeste@gmail.com';
 
-export async function getEventos() {
+export async function getEventos(): Promise<ServiceResult<any[]>> {
   try {
     const agora = new Date().toISOString();
 
@@ -19,11 +20,16 @@ export async function getEventos() {
 
     await salvarCache('agenda', eventos);
 
-    return eventos;
-
+    return {
+      data: eventos,
+      offline: false,
+    };
   } catch (error) {
     console.log('Usando cache da agenda');
 
-    return (await lerCache<any[]>('agenda')) ?? [];
+    return {
+      data: (await lerCache<any[]>('agenda')) ?? [],
+      offline: true,
+    };
   }
 }

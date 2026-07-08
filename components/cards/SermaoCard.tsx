@@ -1,17 +1,30 @@
 import { router } from 'expo-router';
 import {
-    Image,
-    Pressable,
-    Text,
-    View,
+  Image,
+  Pressable,
+  Text,
+  View,
 } from 'react-native';
 
 type Props = {
   video: any;
 };
 
-export default function SermaoCard({ video }: Props) {
+export default function SermaoCard({
+  video,
+}: Props) {
   if (!video) return null;
+
+  const videoId =
+    video.id?.videoId ??
+    video.snippet?.resourceId?.videoId;
+
+  if (!videoId) return null;
+
+  const thumbnail =
+    video.snippet?.thumbnails?.high?.url ??
+    video.snippet?.thumbnails?.medium?.url ??
+    video.snippet?.thumbnails?.default?.url;
 
   return (
     <Pressable
@@ -19,7 +32,7 @@ export default function SermaoCard({ video }: Props) {
         router.push({
           pathname: '/player',
           params: {
-            videoId: video.id.videoId,
+            videoId,
             titulo: video.snippet.title,
           },
         })
@@ -46,7 +59,7 @@ export default function SermaoCard({ video }: Props) {
     >
       <Image
         source={{
-          uri: video.snippet.thumbnails.high.url,
+          uri: thumbnail,
         }}
         resizeMode="cover"
         style={{

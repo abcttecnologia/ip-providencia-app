@@ -7,8 +7,9 @@ import {
 
 import { lerCache, salvarCache } from './cache';
 import { db } from './firebase';
+import { ServiceResult } from './types';
 
-export async function getBiblioteca() {
+export async function getBiblioteca(): Promise<ServiceResult<any[]>> {
   try {
     const q = query(
       collection(db, 'biblioteca'),
@@ -22,14 +23,18 @@ export async function getBiblioteca() {
       ...doc.data(),
     }));
 
-    // Salva no cache
     await salvarCache('biblioteca', dados);
 
-    return dados;
-
+    return {
+      data: dados,
+      offline: false,
+    };
   } catch (error) {
     console.log('Usando cache da biblioteca');
 
-    return (await lerCache<any[]>('biblioteca')) ?? [];
+    return {
+      data: (await lerCache<any[]>('biblioteca')) ?? [],
+      offline: true,
+    };
   }
 }

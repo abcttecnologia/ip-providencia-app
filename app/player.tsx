@@ -9,44 +9,54 @@ import {
 } from 'react-native';
 import YoutubePlayer from 'react-native-youtube-iframe';
 
+import OfflineBanner from '../components/ui/OfflineBanner';
 import { getVideoDetails } from '../services/youtube';
 
 export default function PlayerScreen() {
   const params = useLocalSearchParams();
 
-console.log(params);
+  const videoId = Array.isArray(params.videoId)
+    ? params.videoId[0]
+    : params.videoId;
 
-const videoId = Array.isArray(params.videoId)
-  ? params.videoId[0]
-  : params.videoId;
+  const titulo = Array.isArray(params.titulo)
+    ? params.titulo[0]
+    : params.titulo;
 
-const titulo = Array.isArray(params.titulo)
-  ? params.titulo[0]
-  : params.titulo;
+  const [descricao, setDescricao] =
+    useState('');
 
+  const [erroPlayer, setErroPlayer] =
+    useState('');
 
-  const [descricao, setDescricao] = useState('');
-  const [erroPlayer, setErroPlayer] = useState('');
+  const [offline, setOffline] =
+    useState(false);
 
   useEffect(() => {
-  async function carregarVideo() {
-    try {
-      if (!videoId) return;
+    async function carregarVideo() {
+      try {
+        if (!videoId) return;
 
-      console.log('VIDEO ID:', videoId);
+        const resultado =
+          await getVideoDetails(
+            videoId as string
+          );
 
-      const video = await getVideoDetails(videoId as string);
+        setOffline(
+          resultado.offline
+        );
 
-      console.log('VIDEO:', video);
-
-      setDescricao(video?.snippet?.description ?? '');
-    } catch (error) {
-      console.log('ERRO:', error);
+        setDescricao(
+          resultado.data?.snippet
+            ?.description ?? ''
+        );
+      } catch (error) {
+        console.log(error);
+      }
     }
-  }
 
-  carregarVideo();
-}, [videoId]);
+    carregarVideo();
+  }, [videoId]);
 
   return (
     <ScrollView
@@ -56,47 +66,44 @@ const titulo = Array.isArray(params.titulo)
       }}
       showsVerticalScrollIndicator={false}
     >
-<View
-  style={{
-    backgroundColor: '#023411',
-    paddingTop: 55,
-    paddingBottom: 16,
-    paddingHorizontal: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 18,
-  }}
->
-  <Pressable onPress={() => router.back()}>
-    <Ionicons
-      name="arrow-back"
-      size={24}
-      color="#FFF"
-    />
-  </Pressable>
+      <View
+        style={{
+          backgroundColor: '#023411',
+          paddingTop: 55,
+          paddingBottom: 16,
+          paddingHorizontal: 18,
+          flexDirection: 'row',
+          alignItems: 'center',
+        }}
+      >
+        <Pressable
+          onPress={() => router.back()}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={24}
+            color="#FFF"
+          />
+        </Pressable>
 
-  <Text
-    style={{
-      flex: 1,
-      textAlign: 'center',
-      color: '#FFF',
-      fontSize: 20,
-      fontWeight: '800',
-      marginRight: 24,
-    }}
-  >
-    {titulo}
-  </Text>
-</View>
+        <View style={{ flex: 1 }} />
+      </View>
+
+      <OfflineBanner
+        visible={offline}
+      />
 
       <YoutubePlayer
-        height={220}
+        height={235}
         play={false}
         videoId={videoId as string}
-      onError={(e: any) => {
-  console.log('YOUTUBE ERROR:', e);
-  setErroPlayer('Erro ao carregar o vídeo.');
-}}
+        onError={(e: any) => {
+          console.log(e);
+
+          setErroPlayer(
+            'Erro ao carregar o vídeo.'
+          );
+        }}
       />
 
       {erroPlayer ? (
@@ -109,23 +116,23 @@ const titulo = Array.isArray(params.titulo)
             fontWeight: '700',
           }}
         >
-          Erro do YouTube: {erroPlayer}
+          {erroPlayer}
         </Text>
       ) : null}
 
       <View
         style={{
           paddingHorizontal: 20,
-          paddingTop: 30,
+          paddingTop: 24,
           paddingBottom: 40,
         }}
       >
         <Text
           style={{
-            fontSize: 16,
+            fontSize: 18,
             fontWeight: '700',
             color: '#023411',
-            marginBottom: 12,
+            marginBottom: 18,
           }}
         >
           {titulo}
@@ -134,18 +141,28 @@ const titulo = Array.isArray(params.titulo)
         <View
           style={{
             backgroundColor: '#FFFFFF',
-            borderRadius: 14,
-            padding: 16,
+            borderRadius: 16,
+            padding: 18,
+
+            shadowColor: '#000',
+            shadowOffset: {
+              width: 0,
+              height: 2,
+            },
+            shadowOpacity: 0.05,
+            shadowRadius: 4,
+            elevation: 2,
           }}
         >
           <Text
             style={{
-              fontSize: 14,
+              fontSize: 12,
               color: '#555',
-              lineHeight: 22,
+              lineHeight: 24,
             }}
           >
-            {descricao || 'Descrição não disponível.'}
+            {descricao ||
+              'Descrição não disponível.'}
           </Text>
         </View>
       </View>

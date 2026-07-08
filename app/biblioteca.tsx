@@ -1,20 +1,44 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
+  Alert,
   Linking,
   Pressable,
-  ScrollView,
   Text,
   View,
 } from 'react-native';
 
+import AppCard from '../components/ui/AppCard';
+import AppHeader from '../components/ui/AppHeader';
+import EmptyState from '../components/ui/EmptyState';
+import OfflineBanner from '../components/ui/OfflineBanner';
+import RefreshableScroll from '../components/ui/RefreshableScroll';
+import Screen from '../components/ui/Screen';
+import ScreenLoader from '../components/ui/ScreenLoader';
+
 import { getBiblioteca } from '../services/biblioteca';
 
+type Material = {
+  id: string;
+  titulo: string;
+  descricao: string;
+  url: string;
+  ativo: boolean;
+};
+
 export default function BibliotecaScreen() {
-  const [materiais, setMateriais] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [materiais, setMateriais] =
+    useState<Material[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const [offline, setOffline] =
+    useState(false);
 
   useEffect(() => {
     carregar();
@@ -22,155 +46,151 @@ export default function BibliotecaScreen() {
 
   async function carregar() {
     try {
-      const dados = await getBiblioteca();
-      setMateriais(dados.filter((item: any) => item.ativo));
-    } catch (e) {
-      console.log(e);
+      const resultado =
+        await getBiblioteca();
+
+      setOffline(resultado.offline);
+
+      setMateriais(
+        resultado.data.filter(
+          (item: Material) => item.ativo
+        )
+      );
+    } catch (error) {
+      console.log(error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function atualizar() {
+    setRefreshing(true);
+
+    try {
+      await carregar();
+    } finally {
+      setRefreshing(false);
     }
   }
 
   if (loading) {
     return (
       <>
-        <Stack.Screen options={{ headerShown: false }} />
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: '#ECE8DD',
-            justifyContent: 'center',
-            alignItems: 'center',
+        <Stack.Screen
+          options={{
+            headerShown: false,
           }}
-        >
-          <ActivityIndicator
-            size="large"
-            color="#023411"
+        />
+
+        <Screen>
+          <ScreenLoader
+            message="Carregando biblioteca..."
           />
-        </View>
+        </Screen>
       </>
     );
   }
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: false }} />
-
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: '#ECE8DD',
+      <Stack.Screen
+        options={{
+          headerShown: false,
         }}
-      >
-        {/* CABEÇALHO */}
-        <View
-          style={{
-            backgroundColor: '#023411',
-            height: 105,
-            paddingTop: 50,
-            paddingHorizontal: 20,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Pressable
-            onPress={() => router.back()}
-            style={{
-              position: 'absolute',
-              left: 20,
-              top: 65,
-            }}
-          >
-            <Ionicons
-              name="arrow-back"
-              size={24}
-              color="#FFFFFF"
-            />
-          </Pressable>
+      />
 
-          <Text
-            style={{
-              color: '#FFFFFF',
-              fontSize: 20,
-              fontWeight: '700',
-            }}
-          >
-            Biblioteca
-          </Text>
-        </View>
+      <Screen>
+        <AppHeader title="Biblioteca" />
 
-        <ScrollView
+        <OfflineBanner
+          visible={offline}
+        />
+
+        <RefreshableScroll
+          refreshing={refreshing}
+          onRefresh={atualizar}
           contentContainerStyle={{
             padding: 20,
             paddingBottom: 40,
           }}
         >
-          {materiais.map((item: any) => (
-            <Pressable
-              key={item.id}
-              onPress={() => Linking.openURL(item.url)}
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: 24,
-                padding: 18,
-                marginBottom: 16,
+                    {materiais.length === 0 ? (
+            <EmptyState
+              icon="library-outline"
+              title="Nenhum material"
+              description="Ainda não há materiais disponíveis."
+            />
+          ) : (
+            materiais.map((item) => (
+              <AppCard key={item.id}>
+                <Pressable
+                  onPress={async () => {
+                    const supported =
+                      await Linking.canOpenURL(
+                        item.url
+                      );
 
-                flexDirection: 'row',
-                alignItems: 'center',
-
-                shadowColor: '#000',
-                shadowOpacity: 0.06,
-                shadowRadius: 6,
-                shadowOffset: {
-                  width: 0,
-                  height: 2,
-                },
-                elevation: 2,
-              }}
-            >
-              <Ionicons
-                name="book-outline"
-                size={34}
-                color="#023411"
-              />
-
-              <View
-                style={{
-                  flex: 1,
-                  marginLeft: 16,
-                }}
-              >
-                <Text
+                    if (supported) {
+                      await Linking.openURL(
+                        item.url
+                      );
+                    } else {
+                      Alert.alert(
+                        'Erro',
+                        'Não foi possível abrir este arquivo.'
+                      );
+                    }
+                  }}
                   style={{
-                    fontSize: 14,
-                    fontWeight: '700',
-                    color: '#023411',
+                    flexDirection: 'row',
+                    alignItems: 'center',
                   }}
                 >
-                  {item.titulo}
-                </Text>
+                  <Ionicons
+                    name="book-outline"
+                    size={34}
+                    color="#023411"
+                  />
 
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: '#777',
-                    marginTop: 4,
-                  }}
-                >
-                  {item.descricao}
-                </Text>
-              </View>
+                  <View
+                    style={{
+                      flex: 1,
+                      marginLeft: 16,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        fontWeight: '700',
+                        color: '#023411',
+                      }}
+                    >
+                      {item.titulo}
+                    </Text>
 
-              <Ionicons
-                name="chevron-forward"
-                size={24}
-                color="#023411"
-              />
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        color: '#777',
+                        marginTop: 4,
+                        lineHeight: 18,
+                      }}
+                    >
+                      {item.descricao}
+                    </Text>
+                  </View>
+
+                  <Ionicons
+                    name="chevron-forward"
+                    size={24}
+                    color="#023411"
+                  />
+                </Pressable>
+              </AppCard>
+            ))
+          )}
+        </RefreshableScroll>
+      </Screen>
     </>
   );
-}
+}          

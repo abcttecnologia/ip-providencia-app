@@ -8,10 +8,13 @@ import {
 
 import { WebView } from 'react-native-webview';
 
+import OfflineBanner from '../../components/ui/OfflineBanner';
+
 import { getLinks } from '../../services/config';
 
 export default function BoletimScreen() {
   const [boletim, setBoletim] = useState('');
+  const [offline, setOffline] = useState(false);
 
   useEffect(() => {
     carregarBoletim();
@@ -19,8 +22,13 @@ export default function BoletimScreen() {
 
   async function carregarBoletim() {
     try {
-      const links = await getLinks();
-      setBoletim(links.boletim);
+      const resultado = await getLinks();
+
+      setOffline(resultado.offline);
+
+      setBoletim(
+        resultado.data?.boletim ?? ''
+      );
     } catch (error) {
       console.log(error);
     }
@@ -39,6 +47,8 @@ export default function BoletimScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <OfflineBanner visible={offline} />
+
       <WebView
         source={{ uri: boletim }}
         startInLoadingState
