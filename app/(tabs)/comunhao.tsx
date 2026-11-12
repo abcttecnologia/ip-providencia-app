@@ -33,7 +33,6 @@ type Resource = {
   title: string;
   icon: IconName;
   route?: CommunityRoute;
-  access: 'all' | 'member' | 'signedIn';
   action?: 'clubeBiblia';
 };
 
@@ -42,49 +41,41 @@ const RESOURCES: Resource[] = [
     title: 'Meu Perfil',
     icon: 'person-outline',
     route: '/perfil',
-    access: 'all',
   },
   {
     title: 'Minha Família',
     icon: 'home-outline',
     route: '/familia',
-    access: 'member',
   },
   {
     title: 'Ministérios',
     icon: 'people-circle-outline',
     route: '/ministerios',
-    access: 'member',
   },
   {
     title: 'Pequenos Grupos',
     icon: 'people-outline',
     route: '/pequenosGrupos',
-    access: 'all',
   },
   {
     title: 'Pedidos de oração',
     icon: 'heart-outline',
     route: '/pedidosOracao',
-    access: 'all',
   },
   {
     title: 'Minha EBD',
     icon: 'book-outline',
     route: '/ebd',
-    access: 'member',
   },
   {
     title: 'Plano Bíblico',
     icon: 'reader-outline',
-    access: 'all',
     action: 'clubeBiblia',
   },
   {
     title: 'Minhas anotações',
     icon: 'create-outline',
     route: '/anotacoes',
-    access: 'signedIn',
   },
 ];
 
@@ -94,9 +85,6 @@ export default function ComunhaoScreen() {
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const isMember =
-    user?.ativo === true &&
-    (user.perfil === 'MEMBRO' || user.perfil === 'ADMINISTRADOR');
   const isAdmin = user?.ativo === true && user.perfil === 'ADMINISTRADOR';
 
   const loadLinks = useCallback(async () => {
@@ -185,12 +173,6 @@ export default function ComunhaoScreen() {
     if (resource.route) router.push(resource.route);
   }
 
-  const resources = RESOURCES.filter((resource) => {
-    if (resource.access === 'member') return isMember;
-    if (resource.access === 'signedIn') return Boolean(user);
-    return true;
-  });
-
   return (
     <Screen>
       <AppHeader title="Comunhão" showBack={false} />
@@ -220,27 +202,36 @@ export default function ComunhaoScreen() {
             rowGap: 12,
           }}
         >
-          {resources.map((resource) => (
+          {RESOURCES.map((resource) => (
             <Pressable
               key={resource.title}
               accessibilityRole="button"
               onPress={() => openResource(resource)}
               style={{
-                width: '48%',
-                minHeight: 112,
-                padding: 14,
+                width: '31%',
+                height: 112,
+                paddingHorizontal: 8,
                 borderRadius: 18,
                 backgroundColor: '#F8F7F3',
-                justifyContent: 'space-between',
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.05,
+                shadowRadius: 3,
+                elevation: 2,
               }}
             >
-              <Ionicons name={resource.icon} size={24} color="#1A3F12" />
+              <Ionicons name={resource.icon} size={26} color="#1A3F12" />
               <Text
+                numberOfLines={2}
                 style={{
                   color: '#023411',
-                  fontSize: 13,
+                  fontSize: 11,
                   fontWeight: '700',
-                  marginTop: 12,
+                  lineHeight: 15,
+                  marginTop: 8,
+                  textAlign: 'center',
                 }}
               >
                 {resource.title}
