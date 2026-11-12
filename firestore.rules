@@ -272,34 +272,15 @@ service cloud.firestore {
         && validPushToken(request.resource.data)
         && request.resource.data.ativo == true
       );
-      allow update: if isAdmin()
-        || (
-          ownsToken(resource.data)
-          && ownsToken(request.resource.data)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'plataforma',
-            'ativo',
-            'atualizadoEm'
-          ])
-          && validPushToken(request.resource.data)
-        )
-        || (
-          resource.data.ativo == false
-          && ownsToken(request.resource.data)
-          && validPushToken(request.resource.data)
-          && request.resource.data.ativo == true
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'uid',
-            'plataforma',
-            'ativo',
-            'atualizadoEm'
-          ])
-        )
-        || (
+      allow update: if isAdmin() || (
+        (
           !resource.data.keys().hasAny(['uid'])
-          && ownsToken(request.resource.data)
-          && validPushToken(request.resource.data)
-        );
+          || resource.data.uid == request.auth.uid
+          || resource.data.ativo == false
+        )
+        && ownsToken(request.resource.data)
+        && validPushToken(request.resource.data)
+      );
       allow delete: if isAdmin() || ownsToken(resource.data);
     }
 

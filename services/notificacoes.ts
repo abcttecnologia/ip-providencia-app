@@ -93,7 +93,6 @@ async function registrarNotificacoesInterno() {
         ativo: true,
         atualizadoEm: serverTimestamp(),
       },
-      { merge: true },
     );
   } catch (error) {
     console.error('Falha ao registrar notificações push:', error);
