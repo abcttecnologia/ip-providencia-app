@@ -6,7 +6,7 @@ export default function BoletimCard() {
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={() => router.push('/boletim')}
+      onPress={() => router.push('/(tabs)/boletim')}
       style={{
         marginHorizontal: 16,
         marginBottom: 16,

@@ -11,8 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { WebView } from 'react-native-webview';
 
-import OfflineBanner from '../../components/ui/OfflineBanner';
 import AppHeader from '../../components/ui/AppHeader';
+import OfflineBanner from '../../components/ui/OfflineBanner';
 
 import { getLinks } from '../../services/config';
 
@@ -50,17 +50,6 @@ export default function BoletimScreen() {
     };
   }, [tentativa]);
 
-  if (!boletim && !erroCarregamento) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator
-          size="large"
-          color="#1E5631"
-        />
-      </View>
-    );
-  }
-
   return (
     <SafeAreaView
       style={styles.container}
@@ -69,7 +58,11 @@ export default function BoletimScreen() {
       <AppHeader title="Boletim / Devocional" />
       <OfflineBanner visible={offline} />
 
-      {erroCarregamento ? (
+      {!boletim && !erroCarregamento ? (
+        <View style={styles.loading}>
+          <ActivityIndicator size="large" color="#1E5631" />
+        </View>
+      ) : erroCarregamento ? (
         <View style={styles.loading}>
           <Text style={styles.errorText}>
             Não foi possível carregar o Boletim. Verifique sua conexão e tente novamente.
@@ -86,60 +79,57 @@ export default function BoletimScreen() {
           </Pressable>
         </View>
       ) : (
-        <View
-          style={styles.webViewContainer}
-        >
-          <WebView
-            key={`${tentativa}-${contentWidth}`}
-            source={{ uri: boletim }}
-            style={{ width: contentWidth, alignSelf: 'center' }}
-            injectedJavaScript={`
-              (function() {
-                var viewport = document.querySelector('meta[name="viewport"]');
-                if (!viewport) {
-                  viewport = document.createElement('meta');
-                  viewport.name = 'viewport';
-                  document.head.appendChild(viewport);
-                }
-                viewport.content = 'width=device-width, initial-scale=1';
+        <View style={styles.webViewContainer}>
+          <View style={[styles.webViewCard, { width: contentWidth }]}>
+            <WebView
+              key={`${tentativa}-${contentWidth}`}
+              source={{ uri: boletim }}
+              style={{ flex: 1, width: contentWidth, backgroundColor: '#FFF' }}
+              injectedJavaScript={`
+                (function() {
+                  var viewport = document.querySelector('meta[name="viewport"]');
+                  if (!viewport) {
+                    viewport = document.createElement('meta');
+                    viewport.name = 'viewport';
+                    document.head.appendChild(viewport);
+                  }
+                  viewport.content = 'width=device-width, initial-scale=1';
 
-                var style = document.createElement('style');
-                style.textContent = [
-                  'html, body { width: 100% !important; min-width: 0 !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; box-sizing: border-box !important; }',
-                  'body { padding: 16px 0 56px !important; text-align: left !important; }',
-                  '*, *::before, *::after { box-sizing: border-box !important; max-width: 100% !important; }',
-                  'p, li, td, th, div, span { min-width: 0 !important; white-space: normal !important; text-align: left !important; overflow-wrap: anywhere !important; word-break: break-word !important; }',
-                  'img, video, iframe, table { max-width: 100% !important; height: auto !important; }',
-                  'table { width: 100% !important; table-layout: fixed !important; }'
-                ].join('');
-                document.head.appendChild(style);
-                return true;
-              })();
-            `}
-            startInLoadingState
-            onLoad={() => {
-              setOffline(false);
-              setErroCarregamento(false);
-            }}
-            onError={({ nativeEvent }) => {
-              console.error('Erro ao carregar o Boletim:', nativeEvent);
-              setOffline(false);
-              setErroCarregamento(true);
-            }}
-            onHttpError={({ nativeEvent }) => {
-              console.error('Erro HTTP ao carregar o Boletim:', nativeEvent);
-              setOffline(false);
-              setErroCarregamento(true);
-            }}
-            renderLoading={() => (
-              <View style={styles.loading}>
-                <ActivityIndicator
-                  size="large"
-                  color="#1E5631"
-                />
-              </View>
-            )}
-          />
+                  var style = document.createElement('style');
+                  style.textContent = [
+                    'html, body { width: 100% !important; min-width: 0 !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; box-sizing: border-box !important; }',
+                    'body { padding: 16px 16px 56px !important; text-align: left !important; }',
+                    '*, *::before, *::after { box-sizing: border-box !important; max-width: 100% !important; }',
+                    'p, li, td, th, div, span { min-width: 0 !important; white-space: normal !important; text-align: left !important; overflow-wrap: anywhere !important; word-break: break-word !important; }',
+                    'img, video, iframe, table { max-width: 100% !important; height: auto !important; }',
+                    'table { width: 100% !important; table-layout: fixed !important; }'
+                  ].join('');
+                  document.head.appendChild(style);
+                  return true;
+                })();
+              `}
+              startInLoadingState
+              onLoad={() => {
+                setOffline(false);
+                setErroCarregamento(false);
+              }}
+              onError={({ nativeEvent }) => {
+                console.error('Erro ao carregar o Boletim:', nativeEvent);
+                setOffline(false);
+                setErroCarregamento(true);
+              }}
+              onHttpError={({ nativeEvent }) => {
+                console.error('Erro HTTP ao carregar o Boletim:', nativeEvent);
+                setOffline(false);
+                setErroCarregamento(true);
+              }}
+              renderLoading={() => (
+                <View style={styles.loading}>
+                  <ActivityIndicator size="large" color="#1E5631" />
+                </View>
+              )}
+            />
+          </View>
         </View>
       )}
     </SafeAreaView>
@@ -153,9 +143,20 @@ const styles = StyleSheet.create({
 
   webViewContainer: {
     flex: 1,
-    overflow: 'hidden',
     paddingHorizontal: 20,
     paddingBottom: 24,
+  },
+
+  webViewCard: {
+    flex: 1,
+    overflow: 'hidden',
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
 
   loading: {
