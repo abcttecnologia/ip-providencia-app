@@ -226,6 +226,35 @@ import { useCurrentUserProfile } from '../../hooks/useCurrentUserProfile';
             </Pressable>
           ) : null}
 
+          {user?.ativo && user.perfil === 'ADMINISTRADOR' ? (
+            <Pressable
+              onPress={() => router.push('/admin/conteudo')}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#F8F7F3',
+                borderRadius: 18,
+                marginHorizontal: 16,
+                marginBottom: 16,
+                padding: 18,
+              }}
+            >
+              <Ionicons name="settings-outline" size={26} color="#023411" />
+              <Text
+                style={{
+                  flex: 1,
+                  marginLeft: 12,
+                  color: '#023411',
+                  fontSize: 14,
+                  fontWeight: '700',
+                }}
+              >
+                Gerenciar avisos e eventos
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color="#546B5F" />
+            </Pressable>
+          ) : null}
+
           {/* Primeira linha */}
           <View
             style={{

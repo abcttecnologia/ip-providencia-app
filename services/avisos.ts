@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   getDocs,
   serverTimestamp,
   updateDoc,
@@ -80,4 +81,8 @@ export async function updateAviso(
     ...changes,
     atualizadoEm: serverTimestamp(),
   });
+}
+
+export async function deleteAviso(id: string) {
+  await deleteDoc(doc(db, 'Avisos', id));
 }

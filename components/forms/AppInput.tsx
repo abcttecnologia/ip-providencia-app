@@ -7,14 +7,16 @@ import {
 
 import { Theme } from "../../constants/theme";
 
-interface Props extends TextInputProps {}
+type Props = TextInputProps;
 
 export default function AppInput(props: Props) {
+  const { style, ...inputProps } = props;
+
   return (
     <TextInput
       placeholderTextColor="#999"
-      style={styles.input}
-      {...props}
+      style={[styles.input, style]}
+      {...inputProps}
     />
   );
 }

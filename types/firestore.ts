@@ -26,6 +26,7 @@ export interface Aviso {
 export interface Evento {
   id: string;
   titulo: string;
+  categoria?: string;
   subtitulo?: string;
   descricao?: string;
   data?: string;

@@ -28,7 +28,7 @@ administrativo é verificado em `users/{uid}` pelo campo `perfil`.
 | --- | --- | --- | --- |
 | `users/{uid}` | `uid`, `email`, `nome`, `perfil`, `ativo`, `ministerios`, `criadoEm`, `atualizadoEm`; opcionais `telefone`, `endereco`, `dataNascimento`, `estadoCivil`, `membroDesde`, `fotoUrl`, `familiaId`, `pequenoGrupoId`, `salaEbdId` | A própria pessoa lê seu documento; administrador lê todos | Cadastro cria apenas o próprio perfil básico `VISITANTE`; a pessoa altera somente dados pessoais; administrador altera ou exclui o documento |
 | `Avisos/{id}` | `titulo`, `descricao`, `data`, `importante`, `categoria`, `publico`, `alvoId`, datas de criação/atualização | Público indicado por `publico` | Administrador cria, edita e exclui |
-| `eventos/{id}` | `titulo`, `subtitulo`, `descricao`, `imagem`, `tipo`, `ordem`, `ativo`, `data`, `publico`, `alvoId`, datas de criação/atualização | Público indicado por `publico` | Administrador cria, edita e exclui |
+| `eventos/{id}` | `titulo`, `categoria`, `subtitulo`, `descricao`, `imagem`, `tipo`, `ordem`, `ativo`, `data`, `publico`, `alvoId`, datas de criação/atualização | Público indicado por `publico` | Administrador cria, edita e exclui |
 | `biblioteca/{id}` | `titulo`, `descricao`, `url`, `ativo`, `ordem`, `tipo` (`material` ou `sermao`) | Público | Administrador cria, edita e exclui |
 | `campanha/casaNova` | Campos atuais do documento, preservados sem alteração | Público | Administrador |
 | `config/links` | Campos de links já usados pelo app: `instagram`, `clubeBiblia`, `mapa` e `boletim` | Público | Administrador |
