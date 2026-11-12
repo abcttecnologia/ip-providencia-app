@@ -19,6 +19,16 @@ import { useCurrentUserProfile } from '../../hooks/useCurrentUserProfile';
   import { getLinks } from '../../services/config';
   import { logout } from '../../services/auth';
 
+  const MEMBER_LINKS = [
+    { title: 'Minha EBD', route: '/ebd', icon: 'book-outline' },
+    {
+      title: 'Ministérios',
+      route: '/ministerios',
+      icon: 'people-circle-outline',
+    },
+    { title: 'Minha Família', route: '/familia', icon: 'home-outline' },
+  ] as const;
+
   export default function MaisScreen() {
     const { user } = useCurrentUserProfile();
     const [links, setLinks] =
@@ -309,6 +319,68 @@ import { useCurrentUserProfile } from '../../hooks/useCurrentUserProfile';
               </Text>
               <Ionicons name="chevron-forward" size={20} color="#546B5F" />
             </Pressable>
+          ) : null}
+
+          <Pressable
+            onPress={() => router.push('/pequenosGrupos')}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: '#F8F7F3',
+              borderRadius: 18,
+              marginHorizontal: 16,
+              marginBottom: 12,
+              padding: 18,
+            }}
+          >
+            <Ionicons name="people-outline" size={26} color="#023411" />
+            <Text
+              style={{
+                flex: 1,
+                marginLeft: 12,
+                color: '#023411',
+                fontSize: 14,
+                fontWeight: '700',
+              }}
+            >
+              Pequenos Grupos
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color="#546B5F" />
+          </Pressable>
+
+          {user?.ativo &&
+          (user.perfil === 'MEMBRO' || user.perfil === 'ADMINISTRADOR') ? (
+            <>
+              {MEMBER_LINKS.map((item) => (
+                <Pressable
+                  key={item.route}
+                  onPress={() => router.push(item.route)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: '#F8F7F3',
+                    borderRadius: 18,
+                    marginHorizontal: 16,
+                    marginBottom: 12,
+                    padding: 18,
+                  }}
+                >
+                  <Ionicons name={item.icon} size={26} color="#023411" />
+                  <Text
+                    style={{
+                      flex: 1,
+                      marginLeft: 12,
+                      color: '#023411',
+                      fontSize: 14,
+                      fontWeight: '700',
+                    }}
+                  >
+                    {item.title}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={20} color="#546B5F" />
+                </Pressable>
+              ))}
+            </>
           ) : null}
 
           {/* Primeira linha */}

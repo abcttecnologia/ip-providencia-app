@@ -96,6 +96,38 @@ export default function TabLayout() {
           title: 'Minhas anotações',
         }}
       />
+
+      <Tabs.Screen
+        name="pequenosGrupos"
+        options={{
+          href: null,
+          title: 'Pequenos Grupos',
+        }}
+      />
+
+      <Tabs.Screen
+        name="ebd"
+        options={{
+          href: null,
+          title: 'Minha EBD',
+        }}
+      />
+
+      <Tabs.Screen
+        name="ministerios"
+        options={{
+          href: null,
+          title: 'Ministérios',
+        }}
+      />
+
+      <Tabs.Screen
+        name="familia"
+        options={{
+          href: null,
+          title: 'Minha Família',
+        }}
+      />
     </Tabs>
   );
 }
