@@ -273,12 +273,7 @@ service cloud.firestore {
         && request.resource.data.ativo == true
       );
       allow update: if isAdmin() || (
-        (
-          !resource.data.keys().hasAny(['uid'])
-          || resource.data.uid == request.auth.uid
-          || resource.data.ativo == false
-        )
-        && ownsToken(request.resource.data)
+        ownsToken(request.resource.data)
         && validPushToken(request.resource.data)
       );
       allow delete: if isAdmin() || ownsToken(resource.data);
