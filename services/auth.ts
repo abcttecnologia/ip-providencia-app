@@ -40,6 +40,7 @@ export async function login(email: string, password: string) {
 }
 
 export async function resetPassword(email: string) {
+  auth.languageCode = 'pt-BR';
   return sendPasswordResetEmail(auth, email);
 }
 
