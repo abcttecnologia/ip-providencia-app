@@ -265,7 +265,7 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    match /pushTokens/{tokenId} {
+        match /pushTokens/{tokenId} {
       allow read: if isAdmin() || ownsToken(resource.data);
       allow create: if isAdmin() || (
         ownsToken(request.resource.data)
@@ -294,9 +294,15 @@ service cloud.firestore {
             'ativo',
             'atualizadoEm'
           ])
+        )
+        || (
+          !resource.data.keys().hasAny(['uid'])
+          && ownsToken(request.resource.data)
+          && validPushToken(request.resource.data)
         );
       allow delete: if isAdmin() || ownsToken(resource.data);
     }
+
 
     match /users/{uid} {
       allow get: if (signedIn() && request.auth.uid == uid) || isAdmin();

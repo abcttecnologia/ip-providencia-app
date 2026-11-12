@@ -1,8 +1,8 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { AndroidImportance } from 'expo-notifications';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform } from 'react-native';
 
 import {
@@ -117,15 +117,20 @@ export async function desativarNotificacoes() {
     await Notifications.getExpoPushTokenAsync({ projectId: getProjectId() })
   ).data;
   const tokenRef = doc(db, 'pushTokens', token);
-  const tokenSnapshot = await getDoc(tokenRef);
 
-  if (!tokenSnapshot.exists() || tokenSnapshot.data().uid !== uid) return;
+  try {
+    const tokenSnapshot = await getDoc(tokenRef);
+    if (!tokenSnapshot.exists() || tokenSnapshot.data().uid !== uid) return;
 
-  await updateDoc(tokenRef, {
-    ativo: false,
-    atualizadoEm: serverTimestamp(),
-  });
+    await updateDoc(tokenRef, {
+      ativo: false,
+      atualizadoEm: serverTimestamp(),
+    });
+  } catch {
+    // Token antigo sem dono ou sem permissão: não há o que desativar.
+  }
 }
+
 
 function getProjectId() {
   const projectId =
