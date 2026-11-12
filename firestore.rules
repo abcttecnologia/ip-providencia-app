@@ -173,6 +173,7 @@ service cloud.firestore {
     function validPrayerCreate(data) {
       return data.keys().hasAll([
           'autorUid',
+          'titulo',
           'texto',
           'compartilhadoComPg',
           'pequenoGrupoId',
@@ -182,6 +183,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'autorUid',
+          'titulo',
           'texto',
           'compartilhadoComPg',
           'pequenoGrupoId',
@@ -189,8 +191,12 @@ service cloud.firestore {
           'criadoEm',
           'atualizadoEm'
         ])
+        && data.titulo is string
+        && data.titulo.size() > 0
+        && data.titulo.size() <= 100
         && data.texto is string
         && data.texto.size() > 0
+        && data.texto.size() <= 2000
         && data.status == 'aberto'
         && data.criadoEm == request.time
         && data.atualizadoEm == request.time
@@ -396,19 +402,27 @@ service cloud.firestore {
           && belongsToSmallGroup(resource.data.pequenoGrupoId)
         );
       allow create: if validPrayerCreate(request.resource.data);
-      allow update: if isAdmin()
+      allow update: if (
+          isAdmin()
+          && request.resource.data.status in ['aberto', 'respondido', 'arquivado']
+        )
         || (
           signedIn()
           && resource.data.autorUid == request.auth.uid
           && request.resource.data.autorUid == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'titulo',
             'texto',
             'compartilhadoComPg',
             'pequenoGrupoId',
             'atualizadoEm'
           ])
+          && request.resource.data.titulo is string
+          && request.resource.data.titulo.size() > 0
+          && request.resource.data.titulo.size() <= 100
           && request.resource.data.texto is string
           && request.resource.data.texto.size() > 0
+          && request.resource.data.texto.size() <= 2000
           && request.resource.data.atualizadoEm == request.time
           && validPrayerSharing(request.resource.data)
         );
