@@ -30,7 +30,7 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="mais"
+        name="comunhao"
         options={{
           title: 'Comunhão',
           tabBarIcon: ({ color, size }) => (
@@ -75,6 +75,14 @@ export default function TabLayout() {
           href: null,
           title: 'Boletim',
           tabBarStyle: { display: 'none' },
+        }}
+      />
+
+      <Tabs.Screen
+        name="mais"
+        options={{
+          href: null,
+          title: 'Nossa IPP',
         }}
       />
 
