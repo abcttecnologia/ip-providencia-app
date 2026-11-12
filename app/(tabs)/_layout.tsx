@@ -142,6 +142,14 @@ export default function TabLayout() {
           title: 'Minha Família',
         }}
       />
+
+      <Tabs.Screen
+        name="plano-biblico"
+        options={{
+          href: null,
+          title: 'Plano Bíblico',
+        }}
+      />
     </Tabs>
   );
 }

@@ -27,13 +27,13 @@ type CommunityRoute =
   | '/pequenosGrupos'
   | '/pedidosOracao'
   | '/ebd'
-  | '/anotacoes';
+  | '/anotacoes'
+  | '/plano-biblico';
 
 type Resource = {
   title: string;
   icon: IconName;
-  route?: CommunityRoute;
-  action?: 'clubeBiblia';
+  route: CommunityRoute;
 };
 
 const RESOURCES: Resource[] = [
@@ -70,7 +70,7 @@ const RESOURCES: Resource[] = [
   {
     title: 'Plano Bíblico',
     icon: 'reader-outline',
-    action: 'clubeBiblia',
+    route: '/plano-biblico',
   },
   {
     title: 'Minhas anotações',
@@ -166,11 +166,7 @@ export default function ComunhaoScreen() {
   }
 
   function openResource(resource: Resource) {
-    if (resource.action === 'clubeBiblia') {
-      void openExternalLink(links?.clubeBiblia);
-      return;
-    }
-    if (resource.route) router.push(resource.route);
+    router.push(resource.route);
   }
 
   return (
