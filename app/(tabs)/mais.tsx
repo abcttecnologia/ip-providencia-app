@@ -197,6 +197,33 @@ import { useCurrentUserProfile } from '../../hooks/useCurrentUserProfile';
             IP Providência.
           </Text>
 
+          <Pressable
+            onPress={() => router.push('/pedidosOracao')}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: '#F8F7F3',
+              borderRadius: 18,
+              marginHorizontal: 16,
+              marginBottom: 16,
+              padding: 18,
+            }}
+          >
+            <Ionicons name="heart-outline" size={26} color="#023411" />
+            <Text
+              style={{
+                flex: 1,
+                marginLeft: 12,
+                color: '#023411',
+                fontSize: 14,
+                fontWeight: '700',
+              }}
+            >
+              Pedidos de oração
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color="#546B5F" />
+          </Pressable>
+
           {user ? (
             <Pressable
               onPress={() => router.push('/perfil')}
@@ -221,6 +248,35 @@ import { useCurrentUserProfile } from '../../hooks/useCurrentUserProfile';
                 }}
               >
                 Meu Perfil
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color="#546B5F" />
+            </Pressable>
+          ) : null}
+
+          {user ? (
+            <Pressable
+              onPress={() => router.push('/anotacoes')}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#F8F7F3',
+                borderRadius: 18,
+                marginHorizontal: 16,
+                marginBottom: 16,
+                padding: 18,
+              }}
+            >
+              <Ionicons name="document-text-outline" size={26} color="#023411" />
+              <Text
+                style={{
+                  flex: 1,
+                  marginLeft: 12,
+                  color: '#023411',
+                  fontSize: 14,
+                  fontWeight: '700',
+                }}
+              >
+                Minhas anotações
               </Text>
               <Ionicons name="chevron-forward" size={20} color="#546B5F" />
             </Pressable>

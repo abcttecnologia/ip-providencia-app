@@ -80,6 +80,22 @@ export default function TabLayout() {
           title: 'Meu Perfil',
         }}
       />
+
+      <Tabs.Screen
+        name="pedidosOracao"
+        options={{
+          href: null,
+          title: 'Pedidos de oração',
+        }}
+      />
+
+      <Tabs.Screen
+        name="anotacoes"
+        options={{
+          href: null,
+          title: 'Minhas anotações',
+        }}
+      />
     </Tabs>
   );
 }
