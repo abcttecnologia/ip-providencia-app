@@ -51,6 +51,14 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permita o acesso às fotos para escolher uma imagem para seu perfil.",
+          "cameraPermission": "Permita o acesso à câmera para tirar uma foto para seu perfil.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

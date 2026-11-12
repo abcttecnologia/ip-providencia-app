@@ -73,6 +73,9 @@ Firestore).
 
 `foto` continua reconhecido apenas como campo legado no tipo TypeScript; não é
 gravado pelo fluxo novo nem substitui automaticamente `fotoUrl`.
+As fotos novas ficam em `profilePhotos/{uid}/profile` no Firebase Storage. A
+pessoa autenticada pode ler e substituir somente a própria foto, limitada a
+arquivos de imagem de até 5 MB; as regras ficam em `storage.rules`.
 
 ### Público de avisos e eventos
 

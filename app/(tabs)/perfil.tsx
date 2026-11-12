@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
+import * as ImagePicker from "expo-image-picker";
 import {
   Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -20,6 +22,7 @@ import RefreshableScroll from "../../components/ui/RefreshableScroll";
 import Screen from "../../components/ui/Screen";
 import ScreenLoader from "../../components/ui/ScreenLoader";
 import { useCurrentUserProfile } from "../../hooks/useCurrentUserProfile";
+import { uploadProfilePhoto } from "../../services/profilePhoto";
 import type { AccessOption } from "../../services/userService";
 import {
   getUserAccessOptions,
@@ -40,6 +43,7 @@ interface SelectionModalProps {
   options: SelectionOption[];
   selected: string[];
   multiple?: boolean;
+  clearLabel?: string;
   onClose: () => void;
   onSelect: (values: string[]) => void;
 }
@@ -50,6 +54,7 @@ function SelectionModal({
   options,
   selected,
   multiple = false,
+  clearLabel = "Limpar vínculo",
   onClose,
   onSelect,
 }: SelectionModalProps) {
@@ -111,7 +116,7 @@ function SelectionModal({
               }}
               style={styles.modalAction}
             >
-              <Text style={styles.linkText}>Limpar vínculo</Text>
+              <Text style={styles.linkText}>{clearLabel}</Text>
             </Pressable>
             {multiple ? (
               <Pressable onPress={onClose} style={styles.modalAction}>
@@ -129,6 +134,35 @@ function SelectionModal({
   );
 }
 
+const ESTADO_CIVIL_OPTIONS: SelectionOption[] = [
+  { value: "Solteiro(a)", label: "Solteiro(a)" },
+  { value: "Casado(a)", label: "Casado(a)" },
+  { value: "União estável", label: "União estável" },
+  { value: "Divorciado(a)", label: "Divorciado(a)" },
+  { value: "Viúvo(a)", label: "Viúvo(a)" },
+  { value: "Prefiro não informar", label: "Prefiro não informar" },
+];
+
+const ACCESS_MESSAGES: Record<AppUser["perfil"], string> = {
+  VISITANTE: "Visitante. Para se tornar membro, fale com a secretaria.",
+  MEMBRO: "Membro",
+  ADMINISTRADOR: "Administrador",
+};
+
+function formatarDataNascimento(value: string) {
+  const isoDate = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const digits = (isoDate
+    ? `${isoDate[3]}${isoDate[2]}${isoDate[1]}`
+    : value.replace(/\D/g, "")
+  ).slice(0, 8);
+
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) {
+    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  }
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
 function getOptionLabel(options: AccessOption[], id: string) {
   return options.find((option) => option.id === id)?.nome ?? id;
 }
@@ -144,14 +178,16 @@ function PersonalProfileForm({
   const [telefone, setTelefone] = useState(user.telefone ?? "");
   const [endereco, setEndereco] = useState(user.endereco ?? "");
   const [dataNascimento, setDataNascimento] = useState(
-    user.dataNascimento ?? "",
+    formatarDataNascimento(user.dataNascimento ?? ""),
   );
   const [estadoCivil, setEstadoCivil] = useState(user.estadoCivil ?? "");
   const [fotoUrl, setFotoUrl] = useState(user.fotoUrl ?? "");
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showCivilStatus, setShowCivilStatus] = useState(false);
 
   async function saveProfile() {
-    if (saving) return;
+    if (saving || uploadingPhoto) return;
     if (!nome.trim()) {
       Alert.alert("Confira seus dados", "Informe seu nome.");
       return;
@@ -182,8 +218,106 @@ function PersonalProfileForm({
     }
   }
 
+  async function savePhoto(asset: ImagePicker.ImagePickerAsset) {
+    setUploadingPhoto(true);
+    try {
+      const photoUrl = await uploadProfilePhoto(
+        user.uid,
+        asset.uri,
+        asset.mimeType,
+      );
+      await updateOwnProfile(user.uid, { fotoUrl: photoUrl });
+      setFotoUrl(photoUrl);
+      onSaved();
+      Alert.alert("Foto atualizada", "Sua foto de perfil foi salva.");
+    } catch (error) {
+      console.error("Falha ao salvar foto do perfil:", error);
+      Alert.alert(
+        "Não foi possível salvar a foto",
+        error instanceof Error
+          ? error.message
+          : "Verifique sua conexão e tente novamente.",
+      );
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function pickFromGallery() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.75,
+      });
+
+      if (!result.canceled) await savePhoto(result.assets[0]);
+    } catch (error) {
+      console.error("Falha ao escolher foto da galeria:", error);
+      Alert.alert(
+        "Não foi possível abrir a galeria",
+        "Tente novamente em alguns instantes.",
+      );
+    }
+  }
+
+  async function takePhoto() {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Permissão da câmera",
+          "Permita o acesso à câmera nas configurações do celular para tirar uma foto.",
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.75,
+      });
+
+      if (!result.canceled) await savePhoto(result.assets[0]);
+    } catch (error) {
+      console.error("Falha ao tirar foto do perfil:", error);
+      Alert.alert(
+        "Não foi possível abrir a câmera",
+        "Tente novamente em alguns instantes.",
+      );
+    }
+  }
+
+  function choosePhoto() {
+    Alert.alert("Foto do perfil", "Escolha de onde deseja enviar sua foto.", [
+      { text: "Galeria", onPress: () => void pickFromGallery() },
+      { text: "Câmera", onPress: () => void takePhoto() },
+      { text: "Cancelar", style: "cancel" },
+    ]);
+  }
+
   return (
     <>
+      <View style={styles.photoSection}>
+        {fotoUrl ? (
+          <Image
+            source={{ uri: fotoUrl }}
+            style={styles.profilePhoto}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.profilePhoto, styles.photoPlaceholder]}>
+            <Ionicons name="person-outline" size={40} color="#546B5F" />
+          </View>
+        )}
+        <AppButton
+          title={uploadingPhoto ? "Enviando foto..." : "Escolher foto"}
+          onPress={choosePhoto}
+          disabled={saving || uploadingPhoto}
+        />
+      </View>
+
       <Text style={styles.sectionTitle}>Dados pessoais</Text>
       <Text style={styles.label}>Nome</Text>
       <AppInput value={nome} onChangeText={setNome} editable={!saving} />
@@ -201,28 +335,37 @@ function PersonalProfileForm({
       <Text style={styles.label}>Data de nascimento</Text>
       <AppInput
         value={dataNascimento}
-        onChangeText={setDataNascimento}
+        onChangeText={(value) =>
+          setDataNascimento(formatarDataNascimento(value))
+        }
+        keyboardType="number-pad"
         placeholder="DD/MM/AAAA"
         editable={!saving}
       />
       <Text style={styles.label}>Estado civil</Text>
-      <AppInput
-        value={estadoCivil}
-        onChangeText={setEstadoCivil}
-        editable={!saving}
-      />
-      <Text style={styles.label}>Foto (URL)</Text>
-      <AppInput
-        value={fotoUrl}
-        onChangeText={setFotoUrl}
-        autoCapitalize="none"
-        keyboardType="url"
-        editable={!saving}
-      />
+      <Pressable
+        onPress={() => setShowCivilStatus(true)}
+        disabled={saving || uploadingPhoto}
+        style={styles.selector}
+      >
+        <Text style={styles.selectorText}>
+          {estadoCivil || "Selecione seu estado civil"}
+        </Text>
+        <Ionicons name="chevron-down" size={20} color="#023411" />
+      </Pressable>
       <AppButton
         title={saving ? "Salvando..." : "Salvar meus dados"}
         onPress={saveProfile}
-        disabled={saving}
+        disabled={saving || uploadingPhoto}
+      />
+      <SelectionModal
+        visible={showCivilStatus}
+        title="Estado civil"
+        options={ESTADO_CIVIL_OPTIONS}
+        selected={estadoCivil ? [estadoCivil] : []}
+        clearLabel="Limpar"
+        onClose={() => setShowCivilStatus(false)}
+        onSelect={(values) => setEstadoCivil(values[0] ?? "")}
       />
     </>
   );
@@ -435,10 +578,7 @@ export default function PerfilScreen() {
 
           <AppCard>
             <Text style={styles.sectionTitle}>Acesso</Text>
-            <Text style={styles.bodyText}>Perfil: {user.perfil}</Text>
-            <Text style={styles.bodyText}>
-              Situação: {user.ativo ? "Ativo" : "Inativo"}
-            </Text>
+            <Text style={styles.bodyText}>{ACCESS_MESSAGES[user.perfil]}</Text>
           </AppCard>
 
           {user.perfil === "ADMINISTRADOR" && user.ativo ? (
@@ -616,6 +756,21 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     paddingBottom: 40,
+  },
+  photoSection: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  profilePhoto: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    marginBottom: 14,
+  },
+  photoPlaceholder: {
+    backgroundColor: "#E1E9DE",
+    alignItems: "center",
+    justifyContent: "center",
   },
   sectionTitle: {
     color: "#023411",
