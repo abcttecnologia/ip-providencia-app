@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -54,7 +54,7 @@ export default function SermoesScreen() {
                 }
               : null,
           };
-        } catch (e) {
+        } catch {
           return { offline: true, secao: null };
         }
       });
@@ -71,10 +71,11 @@ export default function SermoesScreen() {
     }
   }, []);
 
-  // Chama apenas uma vez ao montar a tela
-  useEffect(() => {
-    carregarSermoes();
-  }, []); 
+  useFocusEffect(
+    useCallback(() => {
+      void carregarSermoes();
+    }, [carregarSermoes]),
+  );
 
   const atualizar = () => {
     setRefreshing(true);

@@ -50,6 +50,11 @@ export default function RootLayout() {
           />
 
           <Stack.Screen
+            name="configuracoes"
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
             name="player"
             options={{ headerShown: false }}
           />

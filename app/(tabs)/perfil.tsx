@@ -363,7 +363,15 @@ export default function PerfilScreen() {
   if (!user) {
     return (
       <Screen>
-        <AppHeader title="Meu Perfil" showBack={false} />
+        <AppHeader
+          title="Meu Perfil"
+          showBack={false}
+          rightAction={{
+            icon: 'settings-outline',
+            accessibilityLabel: 'Abrir Configurações',
+            onPress: () => router.push('/configuracoes'),
+          }}
+        />
         <EmptyState
           icon="person-outline"
           title={profileError ? "Perfil indisponível" : "Entre na sua conta"}
@@ -407,7 +415,15 @@ export default function PerfilScreen() {
   return (
     <>
       <Screen>
-        <AppHeader title="Meu Perfil" showBack={false} />
+        <AppHeader
+          title="Meu Perfil"
+          showBack={false}
+          rightAction={{
+            icon: 'settings-outline',
+            accessibilityLabel: 'Abrir Configurações',
+            onPress: () => router.push('/configuracoes'),
+          }}
+        />
         <RefreshableScroll
           contentContainerStyle={styles.content}
           refreshing={false}
