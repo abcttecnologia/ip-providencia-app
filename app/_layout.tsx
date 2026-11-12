@@ -65,6 +65,46 @@ export default function RootLayout() {
           />
 
           <Stack.Screen
+            name="boletim"
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="pedidosOracao"
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="anotacoes"
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="pequenosGrupos"
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="ebd"
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="ministerios"
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="familia"
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="plano-biblico"
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
             name="configuracoes"
             options={{ headerShown: false }}
           />

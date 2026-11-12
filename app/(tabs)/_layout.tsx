@@ -71,15 +71,6 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="boletim"
-        options={{
-          href: null,
-          title: 'Boletim',
-          tabBarStyle: { display: 'none' },
-        }}
-      />
-
-      <Tabs.Screen
         name="mais"
         options={{
           href: null,
@@ -95,61 +86,6 @@ export default function TabLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="pedidosOracao"
-        options={{
-          href: null,
-          title: 'Pedidos de oração',
-        }}
-      />
-
-      <Tabs.Screen
-        name="anotacoes"
-        options={{
-          href: null,
-          title: 'Minhas anotações',
-        }}
-      />
-
-      <Tabs.Screen
-        name="pequenosGrupos"
-        options={{
-          href: null,
-          title: 'Pequenos Grupos',
-        }}
-      />
-
-      <Tabs.Screen
-        name="ebd"
-        options={{
-          href: null,
-          title: 'Minha EBD',
-        }}
-      />
-
-      <Tabs.Screen
-        name="ministerios"
-        options={{
-          href: null,
-          title: 'Ministérios',
-        }}
-      />
-
-      <Tabs.Screen
-        name="familia"
-        options={{
-          href: null,
-          title: 'Minha Família',
-        }}
-      />
-
-      <Tabs.Screen
-        name="plano-biblico"
-        options={{
-          href: null,
-          title: 'Plano Bíblico',
-        }}
-      />
     </Tabs>
   );
 }

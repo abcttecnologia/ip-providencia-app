@@ -14,6 +14,7 @@ import { auth, db } from './firebase';
 import { getUser } from './userService';
 
 export interface PedidoOracaoInput {
+  titulo: string;
   texto: string;
   compartilhadoComPg?: boolean;
 }
@@ -22,12 +23,25 @@ function mapPedido(
   id: string,
   data: Omit<PedidoOracao, 'id'>,
 ): PedidoOracao {
-  return { id, ...data };
+  return {
+    id,
+    ...data,
+    titulo: data.titulo || 'Pedido de oração',
+  };
 }
 
 export async function createPedidoOracao(input: PedidoOracaoInput) {
-  const texto = input.texto.trim();
-  if (!texto) throw new Error('Escreva o pedido de oração antes de enviar.');
+  const tituloLimpo = input.titulo.trim();
+  const textoLimpo = input.texto.trim();
+  if (!tituloLimpo || !textoLimpo) {
+    throw new Error('Preencha o título e o pedido.');
+  }
+  if (tituloLimpo.length > 100) {
+    throw new Error('O título deve ter no máximo 100 caracteres.');
+  }
+  if (textoLimpo.length > 2000) {
+    throw new Error('O pedido deve ter no máximo 2000 caracteres.');
+  }
 
   const uid = auth.currentUser?.uid ?? null;
   const compartilhar = input.compartilhadoComPg === true;
@@ -51,7 +65,8 @@ export async function createPedidoOracao(input: PedidoOracaoInput) {
 
   return addDoc(collection(db, 'pedidosOracao'), {
     autorUid: uid,
-    texto,
+    titulo: tituloLimpo,
+    texto: textoLimpo,
     compartilhadoComPg: compartilhar,
     pequenoGrupoId,
     status: 'aberto',
@@ -107,13 +122,22 @@ export async function getPedidosDoMeuPg(): Promise<PedidoOracao[]> {
 
 export async function updateMeuPedidoOracao(
   id: string,
-  changes: Pick<PedidoOracaoInput, 'texto' | 'compartilhadoComPg'>,
+  changes: Pick<PedidoOracaoInput, 'titulo' | 'texto' | 'compartilhadoComPg'>,
 ) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Entre na sua conta para editar o pedido.');
 
+  const titulo = changes.titulo.trim();
   const texto = changes.texto.trim();
-  if (!texto) throw new Error('Escreva o pedido de oração antes de salvar.');
+  if (!titulo || !texto) {
+    throw new Error('Preencha o título e o pedido.');
+  }
+  if (titulo.length > 100) {
+    throw new Error('O título deve ter no máximo 100 caracteres.');
+  }
+  if (texto.length > 2000) {
+    throw new Error('O pedido deve ter no máximo 2000 caracteres.');
+  }
 
   const user = await getUser(uid);
   const compartilhar = changes.compartilhadoComPg === true;
@@ -127,6 +151,7 @@ export async function updateMeuPedidoOracao(
   }
 
   await updateDoc(doc(db, 'pedidosOracao', id), {
+    titulo,
     texto,
     compartilhadoComPg: compartilhar,
     pequenoGrupoId,

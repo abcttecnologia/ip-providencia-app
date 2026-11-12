@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 
-import MemberAccessNotice from "../../components/member/MemberAccessNotice";
-import AppCard from "../../components/ui/AppCard";
-import AppHeader from "../../components/ui/AppHeader";
-import EmptyState from "../../components/ui/EmptyState";
-import RefreshableScroll from "../../components/ui/RefreshableScroll";
-import Screen from "../../components/ui/Screen";
-import ScreenLoader from "../../components/ui/ScreenLoader";
-import { useMemberAccess } from "../../hooks/useMemberAccess";
-import { getMeusMinisterios } from "../../services/ministerios";
-import type { Ministerio } from "../../types/firestore";
+import MemberAccessNotice from "../components/member/MemberAccessNotice";
+import AppCard from "../components/ui/AppCard";
+import AppHeader from "../components/ui/AppHeader";
+import EmptyState from "../components/ui/EmptyState";
+import RefreshableScroll from "../components/ui/RefreshableScroll";
+import Screen from "../components/ui/Screen";
+import ScreenLoader from "../components/ui/ScreenLoader";
+import { useMemberAccess } from "../hooks/useMemberAccess";
+import { getMeusMinisterios } from "../services/ministerios";
+import type { Ministerio } from "../types/firestore";
 
 export default function MinisteriosScreen() {
   const { user, loading: profileLoading, error, canAccessMemberFeatures } =

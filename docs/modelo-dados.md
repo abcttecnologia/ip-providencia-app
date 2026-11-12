@@ -38,7 +38,7 @@ administrativo é verificado em `users/{uid}` pelo campo `perfil`.
 | `pequenosGrupos/{id}` | `nome`, `descricao`, `bairro`, `diaSemana`, `horario`, `local`, `liderId`, `ativo`, datas de criação/atualização | Lista de grupos ativos é pública; membros veem também seu próprio grupo | Administrador |
 | `salasEbd/{id}` | `nome`, `descricao`, `faixaEtaria`, `diaSemana`, `horario`, `ativo`, datas de criação/atualização | Membro vinculado à sala e administrador | Administrador |
 | `familias/{id}` | `nome`, `membrosUids`, datas de criação/atualização | Membros vinculados à família e administrador | Administrador |
-| `pedidosOracao/{id}` | `autorUid`, `texto`, `compartilhadoComPg`, `pequenoGrupoId`, `status`, datas de criação/atualização | Autor, administrador e membros do PG quando compartilhado com aquele PG | Qualquer pessoa pode criar; autor e administrador podem editar/excluir |
+| `pedidosOracao/{id}` | `autorUid`, `titulo`, `texto` (situação), `compartilhadoComPg`, `pequenoGrupoId`, `status`, datas de criação/atualização | Autor, administrador e membros do PG quando compartilhado com aquele PG | Qualquer pessoa pode criar; autor e administrador podem editar/excluir |
 | `anotacoes/{id}` | `uid`, `titulo`, `conteudo`, `referenciaBiblica`, datas de criação/atualização | Somente o dono | Somente o dono |
 
 `campanha/casaNova` é lido como dado opaco pelo serviço atual, então seus
@@ -94,8 +94,12 @@ antes eram públicos por padrão.
 
 Uma pessoa sem login pode enviar um pedido com `autorUid: null` e sem
 compartilhamento com PG. Por decisão de privacidade, ela não pode ler o pedido
-depois do envio. Uma pessoa autenticada lê os próprios pedidos; se marcar
-compartilhamento com PG, os membros daquele mesmo PG também podem lê-lo.
+depois do envio. Cada novo pedido inclui `titulo` (até 100 caracteres) e
+`texto` (a situação, até 2000 caracteres). O status pode ser `aberto`,
+`respondido` ou `arquivado`. Uma pessoa autenticada lê os próprios pedidos; se
+marcar compartilhamento com PG, os membros daquele mesmo PG também podem
+lê-lo. Os pedidos são salvos em `pedidosOracao`, coleção que o futuro painel
+administrativo poderá consultar.
 
 ### Anotações
 

@@ -3,24 +3,24 @@ import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
-import AppInput from "../../components/forms/AppInput";
-import FormError from "../../components/forms/FormError";
-import AppButton from "../../components/ui/AppButton";
-import AppCard from "../../components/ui/AppCard";
-import AppHeader from "../../components/ui/AppHeader";
-import EmptyState from "../../components/ui/EmptyState";
-import RefreshableScroll from "../../components/ui/RefreshableScroll";
-import Screen from "../../components/ui/Screen";
-import ScreenLoader from "../../components/ui/ScreenLoader";
-import { useCurrentUserProfile } from "../../hooks/useCurrentUserProfile";
+import AppInput from "../components/forms/AppInput";
+import FormError from "../components/forms/FormError";
+import AppButton from "../components/ui/AppButton";
+import AppCard from "../components/ui/AppCard";
+import AppHeader from "../components/ui/AppHeader";
+import EmptyState from "../components/ui/EmptyState";
+import RefreshableScroll from "../components/ui/RefreshableScroll";
+import Screen from "../components/ui/Screen";
+import ScreenLoader from "../components/ui/ScreenLoader";
+import { useCurrentUserProfile } from "../hooks/useCurrentUserProfile";
 import {
   createAnotacao,
   deleteAnotacao,
   getMinhasAnotacoes,
   updateAnotacao,
   type AnotacaoInput,
-} from "../../services/anotacoes";
-import type { Anotacao } from "../../types/firestore";
+} from "../services/anotacoes";
+import type { Anotacao } from "../types/firestore";
 
 export default function AnotacoesScreen() {
   const { user, loading: profileLoading } = useCurrentUserProfile();

@@ -12,10 +12,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { WebView } from 'react-native-webview';
 
-import AppHeader from '../../components/ui/AppHeader';
-import OfflineBanner from '../../components/ui/OfflineBanner';
+import AppHeader from '../components/ui/AppHeader';
+import OfflineBanner from '../components/ui/OfflineBanner';
 
-import { getLinks } from '../../services/config';
+import { getLinks } from '../services/config';
 
 const EXTERNAL_LINK_DOMAINS = [
   'youtube.com',

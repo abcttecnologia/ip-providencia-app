@@ -194,17 +194,18 @@ export default function ComunhaoScreen() {
           style={{
             flexDirection: 'row',
             flexWrap: 'wrap',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-start',
             rowGap: 12,
           }}
         >
-          {RESOURCES.map((resource) => (
+          {RESOURCES.map((resource, index) => (
             <Pressable
               key={resource.title}
               accessibilityRole="button"
               onPress={() => openResource(resource)}
               style={{
                 width: '31%',
+                marginRight: index % 3 === 2 ? 0 : '3.5%',
                 height: 112,
                 paddingHorizontal: 8,
                 borderRadius: 18,

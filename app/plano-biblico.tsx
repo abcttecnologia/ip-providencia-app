@@ -1,7 +1,7 @@
 import { Text, View } from 'react-native';
 
-import AppHeader from '../../components/ui/AppHeader';
-import Screen from '../../components/ui/Screen';
+import AppHeader from '../components/ui/AppHeader';
+import Screen from '../components/ui/Screen';
 
 export default function PlanoBiblicoScreen() {
   return (

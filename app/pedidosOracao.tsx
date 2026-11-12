@@ -1,27 +1,43 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
-import AppInput from "../../components/forms/AppInput";
-import FormError from "../../components/forms/FormError";
-import AppButton from "../../components/ui/AppButton";
-import AppCard from "../../components/ui/AppCard";
-import AppHeader from "../../components/ui/AppHeader";
-import EmptyState from "../../components/ui/EmptyState";
-import RefreshableScroll from "../../components/ui/RefreshableScroll";
-import Screen from "../../components/ui/Screen";
-import ScreenLoader from "../../components/ui/ScreenLoader";
-import { useCurrentUserProfile } from "../../hooks/useCurrentUserProfile";
+import AppInput from "../components/forms/AppInput";
+import FormError from "../components/forms/FormError";
+import AppButton from "../components/ui/AppButton";
+import AppCard from "../components/ui/AppCard";
+import AppHeader from "../components/ui/AppHeader";
+import EmptyState from "../components/ui/EmptyState";
+import RefreshableScroll from "../components/ui/RefreshableScroll";
+import Screen from "../components/ui/Screen";
+import ScreenLoader from "../components/ui/ScreenLoader";
+import { useCurrentUserProfile } from "../hooks/useCurrentUserProfile";
 import {
   createPedidoOracao,
   getMeusPedidosOracao,
   getPedidosDoMeuPg,
-} from "../../services/pedidosOracao";
-import type { PedidoOracao } from "../../types/firestore";
+} from "../services/pedidosOracao";
+import type { PedidoOracao } from "../types/firestore";
+
+const statusTabs: {
+  status: PedidoOracao["status"];
+  label: string;
+}[] = [
+  { status: "aberto", label: "Em acompanhamento" },
+  { status: "respondido", label: "Respondidos" },
+  { status: "arquivado", label: "Arquivados" },
+];
+
+const statusLabels: Record<PedidoOracao["status"], string> = {
+  aberto: "Em acompanhamento",
+  respondido: "Respondido",
+  arquivado: "Arquivado",
+};
 
 export default function PedidosOracaoScreen() {
   const { user, loading: profileLoading } = useCurrentUserProfile();
-  const [texto, setTexto] = useState("");
+  const [titulo, setTitulo] = useState("");
+  const [situacao, setSituacao] = useState("");
   const [compartilharComPg, setCompartilharComPg] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [requestsLoading, setRequestsLoading] = useState(true);
@@ -29,6 +45,8 @@ export default function PedidosOracaoScreen() {
   const [error, setError] = useState("");
   const [ownRequests, setOwnRequests] = useState<PedidoOracao[]>([]);
   const [groupRequests, setGroupRequests] = useState<PedidoOracao[]>([]);
+  const [selectedStatus, setSelectedStatus] =
+    useState<PedidoOracao["status"]>("aberto");
   const [loadedFor, setLoadedFor] = useState("");
   const submissionInProgress = useRef(false);
   const requestScope = user
@@ -104,8 +122,8 @@ export default function PedidosOracaoScreen() {
 
   async function submitRequest() {
     if (submissionInProgress.current) return;
-    if (!texto.trim()) {
-      setError("Escreva seu pedido antes de enviar.");
+    if (!titulo.trim() || !situacao.trim()) {
+      setError("Preencha o título e o pedido.");
       return;
     }
 
@@ -114,16 +132,16 @@ export default function PedidosOracaoScreen() {
     setError("");
     try {
       await createPedidoOracao({
-        texto,
+        titulo,
+        texto: situacao,
         compartilhadoComPg: compartilharComPg,
       });
-      setTexto("");
+      setTitulo("");
+      setSituacao("");
       setCompartilharComPg(false);
       Alert.alert(
         "Pedido enviado",
-        user
-          ? "Seu pedido de oração foi enviado."
-          : "Seu pedido de oração foi enviado. Como visitante sem login, você não poderá consultar o pedido depois.",
+        "Estaremos orando por você.",
       );
       if (user) await loadRequests();
     } catch (submitError) {
@@ -152,6 +170,9 @@ export default function PedidosOracaoScreen() {
   }
 
   const visibleOwnRequests = loadedFor === requestScope ? ownRequests : [];
+  const filteredOwnRequests = visibleOwnRequests.filter(
+    (request) => request.status === selectedStatus,
+  );
   const visibleGroupRequests = (
     loadedFor === requestScope ? groupRequests : []
   ).filter(
@@ -177,18 +198,32 @@ export default function PedidosOracaoScreen() {
 
         <AppCard>
           <Text style={styles.sectionTitle}>Enviar pedido</Text>
+          <Text style={styles.label}>Título do pedido</Text>
           <AppInput
-            value={texto}
+            value={titulo}
             onChangeText={(value) => {
-              setTexto(value);
+              setTitulo(value);
               setError("");
             }}
-            placeholder="Escreva seu pedido de oração"
+            placeholder="Dê um título ao pedido"
+            maxLength={100}
+            editable={!enviando}
+            accessibilityLabel="Título do pedido de oração"
+          />
+          <Text style={styles.label}>Conte a situação</Text>
+          <AppInput
+            value={situacao}
+            onChangeText={(value) => {
+              setSituacao(value);
+              setError("");
+            }}
+            placeholder="Descreva como podemos orar por você"
+            maxLength={2000}
             multiline
             textAlignVertical="top"
             style={styles.multilineInput}
             editable={!enviando}
-            accessibilityLabel="Pedido de oração"
+            accessibilityLabel="Situação do pedido de oração"
           />
 
           {user?.ativo &&
@@ -217,20 +252,51 @@ export default function PedidosOracaoScreen() {
             onPress={submitRequest}
             disabled={enviando}
           />
+          {!user ? (
+            <Text style={styles.privacyNote}>
+              Para acompanhar seus pedidos, entre na sua conta.
+            </Text>
+          ) : null}
         </AppCard>
 
         {user ? (
           <>
             <Text style={styles.listTitle}>Meus pedidos</Text>
-            {visibleOwnRequests.length ? (
-              visibleOwnRequests.map((request) => (
+            <View style={styles.statusTabs}>
+              {statusTabs.map((tab) => (
+                <Pressable
+                  key={tab.status}
+                  accessibilityRole="tab"
+                  accessibilityState={{
+                    selected: selectedStatus === tab.status,
+                  }}
+                  onPress={() => setSelectedStatus(tab.status)}
+                  style={[
+                    styles.statusTab,
+                    selectedStatus === tab.status && styles.statusTabSelected,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusTabText,
+                      selectedStatus === tab.status &&
+                        styles.statusTabTextSelected,
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {filteredOwnRequests.length ? (
+              filteredOwnRequests.map((request) => (
                 <PrayerCard key={request.id} request={request} own />
               ))
             ) : (
               <EmptyState
                 icon="heart-outline"
-                title="Nenhum pedido ainda"
-                description="Os pedidos que você enviar aparecerão aqui."
+                title="Nenhum pedido nesta aba"
+                description="Seus pedidos aparecerão aqui conforme o status."
               />
             )}
 
@@ -249,12 +315,7 @@ export default function PedidosOracaoScreen() {
               </>
             ) : null}
           </>
-        ) : (
-          <Text style={styles.privacyNote}>
-            Pedidos enviados sem login não ficam disponíveis para consulta
-            posterior.
-          </Text>
-        )}
+        ) : null}
       </RefreshableScroll>
     </Screen>
   );
@@ -274,12 +335,19 @@ function PrayerCard({
       ) : (
         <Text style={styles.badge}>Compartilhado com este PG</Text>
       )}
+      <Text style={styles.requestTitle}>{request.titulo}</Text>
       <Text style={styles.requestText}>{request.texto}</Text>
       <Text style={styles.requestDate}>
-        {request.status === "respondido" ? "Respondido" : "Em oração"}
+        {formatRequestDate(request.criadoEm)} · {statusLabels[request.status]}
       </Text>
     </AppCard>
   );
+}
+
+function formatRequestDate(value: PedidoOracao["criadoEm"]): string {
+  if (!value) return "Data indisponível";
+  const date = value instanceof Date ? value : value.toDate();
+  return date.toLocaleDateString("pt-BR");
 }
 
 const styles = StyleSheet.create({
@@ -300,7 +368,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 12,
   },
+  label: {
+    color: "#546B5F",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 5,
+  },
   multilineInput: {
+    height: 140,
     minHeight: 120,
     paddingTop: 14,
   },
@@ -322,6 +397,32 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 12,
   },
+  statusTabs: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  statusTab: {
+    flex: 1,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    borderBottomWidth: 2,
+    borderBottomColor: "#D8DFD7",
+  },
+  statusTabSelected: {
+    borderBottomColor: "#1E5631",
+  },
+  statusTabText: {
+    color: "#546B5F",
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  statusTabTextSelected: {
+    color: "#023411",
+    fontWeight: "700",
+  },
   badge: {
     color: "#1E5631",
     fontSize: 12,
@@ -332,6 +433,12 @@ const styles = StyleSheet.create({
     color: "#333",
     fontSize: 15,
     lineHeight: 23,
+  },
+  requestTitle: {
+    color: "#023411",
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 6,
   },
   requestDate: {
     color: "#777",

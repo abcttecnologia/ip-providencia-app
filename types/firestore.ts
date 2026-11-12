@@ -121,10 +121,11 @@ export interface Familia {
 export interface PedidoOracao {
   id: string;
   autorUid: string | null;
+  titulo: string;
   texto: string;
   compartilhadoComPg: boolean;
   pequenoGrupoId: string | null;
-  status: 'aberto' | 'respondido';
+  status: 'aberto' | 'respondido' | 'arquivado';
   criadoEm?: DataFirestore;
   atualizadoEm?: DataFirestore;
 }
