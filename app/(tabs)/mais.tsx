@@ -1,6 +1,6 @@
   import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+  import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -14,11 +14,13 @@ import {
 import OfflineBanner from '../../components/ui/OfflineBanner';
 import RefreshableScroll from '../../components/ui/RefreshableScroll';
 import Screen from '../../components/ui/Screen';
+import { useCurrentUserProfile } from '../../hooks/useCurrentUserProfile';
 
   import { getLinks } from '../../services/config';
   import { logout } from '../../services/auth';
 
   export default function MaisScreen() {
+    const { user } = useCurrentUserProfile();
     const [links, setLinks] =
       useState<any>(null);
 
@@ -31,11 +33,7 @@ import Screen from '../../components/ui/Screen';
     const [saindo, setSaindo] =
       useState(false);
 
-    useEffect(() => {
-      carregarLinks();
-    }, []);
-
-    async function carregarLinks() {
+    const carregarLinks = useCallback(async () => {
       try {
         const resultado =
           await getLinks();
@@ -49,7 +47,26 @@ import Screen from '../../components/ui/Screen';
           error
         );
       }
-    }
+    }, []);
+
+    useEffect(() => {
+      let active = true;
+
+      getLinks()
+        .then((resultado) => {
+          if (!active) return;
+          setOffline(resultado.offline);
+          setLinks(resultado.data);
+        })
+        .catch((error) => {
+          if (!active) return;
+          console.error('Erro ao carregar links:', error);
+        });
+
+      return () => {
+        active = false;
+      };
+    }, []);
 
     async function atualizar() {
       setRefreshing(true);
@@ -179,6 +196,35 @@ import Screen from '../../components/ui/Screen';
             Acesse conteúdos, informações e recursos da
             IP Providência.
           </Text>
+
+          {user ? (
+            <Pressable
+              onPress={() => router.push('/perfil')}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#F8F7F3',
+                borderRadius: 18,
+                marginHorizontal: 16,
+                marginBottom: 16,
+                padding: 18,
+              }}
+            >
+              <Ionicons name="person-circle-outline" size={28} color="#023411" />
+              <Text
+                style={{
+                  flex: 1,
+                  marginLeft: 12,
+                  color: '#023411',
+                  fontSize: 14,
+                  fontWeight: '700',
+                }}
+              >
+                Meu Perfil
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color="#546B5F" />
+            </Pressable>
+          ) : null}
 
           {/* Primeira linha */}
           <View
