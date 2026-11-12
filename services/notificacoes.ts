@@ -47,14 +47,19 @@ async function registrarNotificacoesInterno() {
   const uid = auth.currentUser?.uid;
   if (!uid) return;
 
+  let etapa = 'preparar notificações';
+  let finalDoToken: string | null = null;
+
   try {
     if (Platform.OS === 'android') {
+      etapa = 'criar canal Android';
       await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
         name: 'Notificações',
         importance: AndroidImportance.DEFAULT,
       });
     }
 
+    etapa = 'verificar permissão';
     let permission = await Notifications.getPermissionsAsync();
 
     if (!permission.granted) {
@@ -78,13 +83,16 @@ async function registrarNotificacoesInterno() {
 
     if (auth.currentUser?.uid !== uid) return;
 
+    etapa = 'obter token Expo';
     const projectId = getProjectId();
     const token = (
       await Notifications.getExpoPushTokenAsync({ projectId })
     ).data;
+    finalDoToken = token.slice(-6);
 
     if (auth.currentUser?.uid !== uid) return;
 
+    etapa = 'gravar token no Firestore';
     await setDoc(
       doc(db, 'pushTokens', token),
       {
@@ -95,7 +103,24 @@ async function registrarNotificacoesInterno() {
       },
     );
   } catch (error) {
-    console.error('Falha ao registrar notificações push:', error);
+    const codigo =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof error.code === 'string'
+        ? error.code
+        : 'desconhecido';
+
+    console.error(
+      'Falha ao registrar notificações push:',
+      {
+        etapa,
+        codigo,
+        plataforma: Platform.OS,
+        finalDoToken,
+      },
+      error,
+    );
   }
 }
 
