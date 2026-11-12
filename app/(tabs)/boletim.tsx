@@ -85,36 +85,30 @@ export default function BoletimScreen() {
         </View>
       ) : (
         <View
-          style={[
-            styles.webViewContainer,
-            {
-              paddingHorizontal: horizontalPadding,
-              paddingBottom: 24,
-            },
-          ]}
+          style={styles.webViewContainer}
         >
           <WebView
             key={`${tentativa}-${contentWidth}`}
             source={{ uri: boletim }}
-            style={{ width: contentWidth }}
+            style={{ width: contentWidth, alignSelf: 'center' }}
             injectedJavaScript={`
               (function() {
-                var contentWidth = ${contentWidth};
                 var viewport = document.querySelector('meta[name="viewport"]');
                 if (!viewport) {
                   viewport = document.createElement('meta');
                   viewport.name = 'viewport';
                   document.head.appendChild(viewport);
                 }
-                viewport.content = 'width=' + contentWidth + ', initial-scale=1';
+                viewport.content = 'width=device-width, initial-scale=1';
 
                 var style = document.createElement('style');
                 style.textContent = [
-                  'html, body { width: ' + contentWidth + 'px !important; max-width: ' + contentWidth + 'px !important; margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; box-sizing: border-box !important; }',
-                  'body { padding: 16px 0 32px !important; text-align: left !important; }',
+                  'html, body { width: 100% !important; min-width: 0 !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; overflow-x: hidden !important; box-sizing: border-box !important; }',
+                  'body { padding: 16px 0 56px !important; text-align: left !important; }',
                   '*, *::before, *::after { box-sizing: border-box !important; max-width: 100% !important; }',
-                  'p, li, td, th { text-align: left !important; overflow-wrap: anywhere !important; }',
-                  'img, video, iframe, table { max-width: 100% !important; }'
+                  'p, li, td, th, div, span { min-width: 0 !important; white-space: normal !important; text-align: left !important; overflow-wrap: anywhere !important; word-break: break-word !important; }',
+                  'img, video, iframe, table { max-width: 100% !important; height: auto !important; }',
+                  'table { width: 100% !important; table-layout: fixed !important; }'
                 ].join('');
                 document.head.appendChild(style);
                 return true;
@@ -157,6 +151,9 @@ const styles = StyleSheet.create({
 
   webViewContainer: {
     flex: 1,
+    overflow: 'hidden',
+    paddingHorizontal: 20,
+    paddingBottom: 24,
   },
 
   loading: {

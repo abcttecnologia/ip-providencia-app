@@ -182,7 +182,7 @@ import { useCurrentUserProfile } from '../../hooks/useCurrentUserProfile';
 
     return (
       <Screen>
-        <AppHeader title="Nossa IPP" />
+        <AppHeader title="Comunhão" showBack={false} />
 
         <OfflineBanner visible={offline} />
 

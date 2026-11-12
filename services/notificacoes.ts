@@ -7,8 +7,10 @@ import { Alert, Platform } from 'react-native';
 
 import {
   doc,
+  getDoc,
   serverTimestamp,
   setDoc,
+  updateDoc,
 } from 'firebase/firestore';
 
 import { auth, db } from './firebase';
@@ -76,14 +78,7 @@ async function registrarNotificacoesInterno() {
 
     if (auth.currentUser?.uid !== uid) return;
 
-    const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ??
-      Constants.easConfig?.projectId;
-
-    if (!projectId) {
-      throw new Error('O EAS projectId não está configurado no app.json.');
-    }
-
+    const projectId = getProjectId();
     const token = (
       await Notifications.getExpoPushTokenAsync({ projectId })
     ).data;
@@ -103,6 +98,45 @@ async function registrarNotificacoesInterno() {
   } catch (error) {
     console.error('Falha ao registrar notificações push:', error);
   }
+}
+
+export async function desativarNotificacoes() {
+  const uid = auth.currentUser?.uid;
+  if (
+    !uid ||
+    !Device.isDevice ||
+    (Platform.OS !== 'ios' && Platform.OS !== 'android')
+  ) {
+    return;
+  }
+
+  const permission = await Notifications.getPermissionsAsync();
+  if (!permission.granted) return;
+
+  const token = (
+    await Notifications.getExpoPushTokenAsync({ projectId: getProjectId() })
+  ).data;
+  const tokenRef = doc(db, 'pushTokens', token);
+  const tokenSnapshot = await getDoc(tokenRef);
+
+  if (!tokenSnapshot.exists() || tokenSnapshot.data().uid !== uid) return;
+
+  await updateDoc(tokenRef, {
+    ativo: false,
+    atualizadoEm: serverTimestamp(),
+  });
+}
+
+function getProjectId() {
+  const projectId =
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    Constants.easConfig?.projectId;
+
+  if (!projectId) {
+    throw new Error('O EAS projectId não está configurado no app.json.');
+  }
+
+  return projectId;
 }
 
 function solicitarPermissao(): Promise<boolean> {

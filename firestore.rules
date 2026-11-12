@@ -134,6 +134,24 @@ service cloud.firestore {
       return signedIn() && tokenData.uid == request.auth.uid;
     }
 
+    function validPushToken(data) {
+      return data.keys().hasAll([
+          'uid',
+          'plataforma',
+          'ativo',
+          'atualizadoEm'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'plataforma',
+          'ativo',
+          'atualizadoEm'
+        ])
+        && data.plataforma in ['ios', 'android']
+        && data.ativo is bool
+        && data.atualizadoEm == request.time;
+    }
+
     function belongsToSmallGroup(groupId) {
       return isMemberOrAdmin()
         && currentUser().pequenoGrupoId == groupId;
@@ -251,21 +269,8 @@ service cloud.firestore {
       allow read: if isAdmin() || ownsToken(resource.data);
       allow create: if isAdmin() || (
         ownsToken(request.resource.data)
-        && request.resource.data.keys().hasAll([
-          'uid',
-          'plataforma',
-          'ativo',
-          'atualizadoEm'
-        ])
-        && request.resource.data.keys().hasOnly([
-          'uid',
-          'plataforma',
-          'ativo',
-          'atualizadoEm'
-        ])
-        && request.resource.data.plataforma in ['ios', 'android']
+        && validPushToken(request.resource.data)
         && request.resource.data.ativo == true
-        && request.resource.data.atualizadoEm == request.time
       );
       allow update: if isAdmin()
         || (
@@ -276,9 +281,19 @@ service cloud.firestore {
             'ativo',
             'atualizadoEm'
           ])
-          && request.resource.data.plataforma in ['ios', 'android']
+          && validPushToken(request.resource.data)
+        )
+        || (
+          resource.data.ativo == false
+          && ownsToken(request.resource.data)
+          && validPushToken(request.resource.data)
           && request.resource.data.ativo == true
-          && request.resource.data.atualizadoEm == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'uid',
+            'plataforma',
+            'ativo',
+            'atualizadoEm'
+          ])
         );
       allow delete: if isAdmin() || ownsToken(resource.data);
     }

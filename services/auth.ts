@@ -8,6 +8,7 @@ import {
 import { auth } from './firebase';
 
 import { ensureUserProfile } from "./userService";
+import { desativarNotificacoes } from './notificacoes';
 
 export async function register(
   nome: string,
@@ -45,5 +46,11 @@ export async function resetPassword(email: string) {
 }
 
 export async function logout() {
+  try {
+    await desativarNotificacoes();
+  } catch (error) {
+    console.error('Não foi possível desativar o token de notificações:', error);
+  }
+
   return signOut(auth);
 }
