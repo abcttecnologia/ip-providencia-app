@@ -1,136 +1,134 @@
-import { lerCache, salvarCache } from './cache';
-import { ServiceResult } from './types';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const API_KEY = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY!;
-const CHANNEL_ID = 'UC4HUbWq13CDWveVGGXhNbKA';
+import { requireEnv } from './env';
 
-export async function getPlaylists(): Promise<ServiceResult<any[]>> {
+// --- CONFIGURAÇÕES DO YOUTUBE ---
+const API_KEY = requireEnv(
+  'EXPO_PUBLIC_GOOGLE_API_KEY',
+  process.env.EXPO_PUBLIC_GOOGLE_API_KEY,
+);
+const CHANNEL_ID = 'UC4HUbWq13CDWveVGGXhNbKA'.trim(); 
+const BASE_URL = 'https://www.googleapis.com/youtube/v3';
+
+const CACHE_KEYS = {
+  PLAYLISTS: '@youtube_playlists',
+  VIDEOS: '@youtube_videos_',
+  HOME_VIDEOS: '@youtube_home_videos',
+  DETAILS: '@youtube_details_'
+};
+
+// --- CACHE ---
+async function salvarNoCache(chave: string, dados: any) {
   try {
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/playlists?part=snippet&channelId=${CHANNEL_ID}&maxResults=50&key=${API_KEY}`
-    );
-
-    const data = await response.json();
-
-    const playlists = data.items ?? [];
-
-    await salvarCache('youtube_playlists', playlists);
-
-    return {
-      data: playlists,
-      offline: false,
-    };
-  } catch (error) {
-    console.log('Usando cache das playlists');
-
-    return {
-      data:
-        (await lerCache<any[]>('youtube_playlists')) ??
-        [],
-      offline: true,
-    };
+    if (dados) {
+      await AsyncStorage.setItem(chave, JSON.stringify(dados));
+    }
+  } catch (e) {
+    console.error("Erro cache:", e);
   }
 }
 
-export async function getPlaylistVideos(
-  playlistId: string
-): Promise<ServiceResult<any[]>> {
+async function lerDoCache(chave: string) {
   try {
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=20&playlistId=${playlistId}&key=${API_KEY}`
-    );
-
-    const data = await response.json();
-
-    const videos = data.items ?? [];
-
-    await salvarCache(
-      `playlist_${playlistId}`,
-      videos
-    );
-
-    return {
-      data: videos,
-      offline: false,
-    };
-  } catch (error) {
-    console.log('Usando cache da playlist');
-
-    return {
-      data:
-        (await lerCache<any[]>(
-          `playlist_${playlistId}`
-        )) ?? [],
-      offline: true,
-    };
+    const valor = await AsyncStorage.getItem(chave);
+    return valor ? JSON.parse(valor) : null;
+  } catch (e) {
+    return null;
   }
 }
 
-export async function getLatestVideos(): Promise<ServiceResult<any[]>> {
+// --- FUNÇÕES ---
+
+export async function getPlaylists() {
   try {
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${CHANNEL_ID}&maxResults=20&order=date&type=video&key=${API_KEY}`
-    );
+    // Montagem manual da URL para evitar erros de caractere especial
+    let url = BASE_URL;
+    url += '/playlists?part=snippet,contentDetails';
+    url += '&channelId=' + CHANNEL_ID;
+    url += '&maxResults=50';
+    url += '&key=' + API_KEY;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
 
-    const data = await response.json();
-
-    const videos = data.items ?? [];
-
-    await salvarCache(
-      'youtube_latest',
-      videos
-    );
-
-    return {
-      data: videos,
-      offline: false,
-    };
+    if (response.ok) {
+      const data = await response.json();
+      await salvarNoCache(CACHE_KEYS.PLAYLISTS, data.items);
+      return { data: data.items, offline: false };
+    }
+    throw new Error("Erro API");
   } catch (error) {
-    console.log(
-      'Usando cache dos últimos vídeos'
-    );
-
-    return {
-      data:
-        (await lerCache<any[]>(
-          'youtube_latest'
-        )) ?? [],
-      offline: true,
-    };
+    const cached = await lerDoCache(CACHE_KEYS.PLAYLISTS);
+    return { data: cached || [], offline: true };
   }
 }
 
-export async function getVideoDetails(
-  videoId: string
-): Promise<ServiceResult<any | null>> {
+export async function getPlaylistVideos(playlistId: string) {
   try {
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${API_KEY}`
-    );
+    let url = BASE_URL;
+    url += '/playlistItems?part=snippet,contentDetails';
+    url += '&maxResults=50';
+    url += '&playlistId=' + playlistId;
+    url += '&key=' + API_KEY;
 
-    const data = await response.json();
-
-    const video =
-      data.items?.[0] ?? null;
-
-    await salvarCache(
-      `video_${videoId}`,
-      video
-    );
-
-    return {
-      data: video,
-      offline: false,
-    };
+    const response = await fetch(url);
+    if (response.ok) {
+      const data = await response.json();
+      await salvarNoCache(CACHE_KEYS.VIDEOS + playlistId, data.items);
+      return { data: data.items, offline: false };
+    }
+    throw new Error("Erro");
   } catch (error) {
-    console.log('Usando cache do vídeo');
+    const cached = await lerDoCache(CACHE_KEYS.VIDEOS + playlistId);
+    return { data: cached || [], offline: true };
+  }
+}
 
+export async function getVideoDetails(videoId: string) {
+  try {
+    let url = BASE_URL;
+    url += '/videos?part=snippet,contentDetails';
+    url += '&id=' + videoId;
+    url += '&key=' + API_KEY;
+
+    const response = await fetch(url);
+    if (response.ok) {
+      const data = await response.json();
+      await salvarNoCache(CACHE_KEYS.DETAILS + videoId, data.items[0]);
+      return { data: data.items[0], offline: false };
+    }
+    throw new Error("Erro");
+  } catch (error) {
+    const cached = await lerDoCache(CACHE_KEYS.DETAILS + videoId);
+    return { data: cached, offline: true };
+  }
+}
+
+export async function getLatestVideos() {
+  return getPlaylists();
+}
+
+export async function getVideos() {
+  try {
+    // Busca os vídeos mais recentes enviados para o canal
+    const url = BASE_URL + '/search?part=snippet&channelId=' + CHANNEL_ID + '&maxResults=1&order=date&type=video&key=' + API_KEY;
+    
+    const response = await fetch(url);
+    if (response.ok) {
+      const data = await response.json();
+      const videos = data.items ?? [];
+      await salvarNoCache(CACHE_KEYS.HOME_VIDEOS, videos);
+      return { data: videos, offline: false };
+    }
+    throw new Error(`YouTube API respondeu ${response.status}`);
+  } catch (error) {
+    console.warn('Falha ao carregar os vídeos mais recentes; usando cache:', error);
+    const cache = await lerDoCache(CACHE_KEYS.HOME_VIDEOS);
     return {
-      data:
-        (await lerCache(
-          `video_${videoId}`
-        )) ?? null,
-      offline: true,
+      data: cache ?? [],
+      offline: Boolean(cache?.length),
     };
   }
 }

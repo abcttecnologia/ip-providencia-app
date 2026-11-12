@@ -1,10 +1,10 @@
 import { doc, getDoc } from 'firebase/firestore';
 
+import type { ConfigLinks, ServiceResult } from '../types/firestore';
 import { lerCache, salvarCache } from './cache';
 import { db } from './firebase';
-import { ServiceResult } from './types';
 
-export async function getLinks(): Promise<ServiceResult<any>> {
+export async function getLinks(): Promise<ServiceResult<ConfigLinks | null>> {
   try {
     const docRef = doc(db, 'config', 'links');
 
@@ -17,7 +17,7 @@ export async function getLinks(): Promise<ServiceResult<any>> {
       };
     }
 
-    const dados = snap.data();
+    const dados = snap.data() as ConfigLinks;
 
     await salvarCache('config-links', dados);
 
@@ -26,10 +26,10 @@ export async function getLinks(): Promise<ServiceResult<any>> {
       offline: false,
     };
   } catch (error) {
-    console.log('Usando cache dos links');
+    console.warn('Falha ao carregar links do Firestore; usando cache:', error);
 
     return {
-      data: await lerCache('config-links'),
+      data: await lerCache<ConfigLinks | null>('config-links'),
       offline: true,
     };
   }

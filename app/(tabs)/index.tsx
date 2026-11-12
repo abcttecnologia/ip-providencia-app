@@ -8,13 +8,13 @@ import MenuCard from '../../components/cards/MenuCard';
 import SermaoCard from '../../components/cards/SermaoCard';
 import VersiculoCard from '../../components/cards/VersiculoCard';
 
-import OfflineBanner from '../../components/ui/OfflineBanner';
 import RefreshableScroll from '../../components/ui/RefreshableScroll';
 import Screen from '../../components/ui/Screen';
 
 import { getAvisos } from '../../services/avisos';
 import { getEventos } from '../../services/calendar';
-import { getLatestVideos } from '../../services/youtube';
+import { getVideos } from '../../services/youtube';
+
 
 export default function HomeScreen() {
 const [ultimoVideo, setUltimoVideo] = useState<any>(null);
@@ -23,18 +23,10 @@ const [avisos, setAvisos] = useState<any[]>([]);
 
 const [refreshing, setRefreshing] = useState(false);
 
-const [offlineAvisos, setOfflineAvisos] =
-  useState(false);
-
-const [offlineAgenda, setOfflineAgenda] =
-  useState(false);
-
-const [offlineYoutube, setOfflineYoutube] =
-  useState(false);
-
   useEffect(() => {
     carregarTudo();
   }, []);
+
 
   async function carregarTudo() {
     await Promise.all([
@@ -49,22 +41,18 @@ const [offlineYoutube, setOfflineYoutube] =
 
     try {
       await carregarTudo();
-    } finally {
+       } finally {
       setRefreshing(false);
     }
   }
 
 async function carregarUltimoVideo() {
   try {
-    const resultado = await getLatestVideos();
+    const resultado = await getVideos();
 
-    setOfflineYoutube(resultado.offline);
-
-    if (resultado.data.length > 0) {
-      setUltimoVideo(resultado.data[0]);
-    }
+    setUltimoVideo(resultado.data[0] ?? null);
   } catch (error) {
-    console.log(error);
+    console.error('Erro ao carregar o último vídeo:', error);
   }
 }
 
@@ -72,13 +60,9 @@ async function carregarProximoEvento() {
   try {
     const resultado = await getEventos();
 
-    setOfflineAgenda(resultado.offline);
-
-    if (resultado.data.length > 0) {
-      setProximoEvento(resultado.data[0]);
-    }
+    setProximoEvento(resultado.data[0] ?? null);
   } catch (error) {
-    console.log(error);
+    console.error('Erro ao carregar o próximo evento:', error);
   }
 }
 
@@ -86,9 +70,7 @@ async function carregarAvisos() {
   try {
     const resultado = await getAvisos();
 
-    setOfflineAvisos(resultado.offline);
-
-    const dados = resultado.data;
+    const dados = resultado.data ?? [];
 
     dados.sort((a: any, b: any) => {
       if (a.importante === b.importante) return 0;
@@ -97,7 +79,7 @@ async function carregarAvisos() {
 
     setAvisos(dados);
   } catch (error) {
-    console.log(error);
+    console.error('Erro ao carregar os avisos:', error);
   }
 }
   function formatarDataEvento(evento: any) {
@@ -128,31 +110,18 @@ async function carregarAvisos() {
         refreshing={refreshing}
         onRefresh={atualizar}
       >
-        <Header />
+<Header />
 
-        <OfflineBanner
-  visible={
-    offlineAvisos ||
-    offlineAgenda ||
-    offlineYoutube
-  }
+<VersiculoCard />
+
+<EventoCard
+  evento={proximoEvento}
+  formatarDataEvento={formatarDataEvento}
 />
 
-        <VersiculoCard />
+<SermaoCard video={ultimoVideo} />
 
-        <EventoCard
-          evento={proximoEvento}
-          formatarDataEvento={formatarDataEvento}
-        />
-
-        <SermaoCard
-          video={ultimoVideo}
-        />
-
-        <AvisosCard
-          avisos={avisos}
-        />
-
+<AvisosCard avisos={avisos} />
         <View
           style={{
             flexDirection: 'row',
@@ -161,7 +130,7 @@ async function carregarAvisos() {
             paddingHorizontal: 16,
             paddingBottom: 30,
           }}
-        >
+        >          
           <MenuCard
             titulo="Dízimos"
             rota="/dizimos"

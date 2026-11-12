@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  Pressable,
   ScrollView,
   Text,
   View,
@@ -154,68 +155,55 @@ export default function AgendaScreen() {
           paddingBottom: 20,
         }}
       >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            gap: 6,
-            paddingTop: 16,
-            paddingBottom: 20,
-          }}
-        >
-          {[
-            {
-              id: 'cultos',
-              titulo: 'Cultos',
-            },
-            {
-              id: 'ebd',
-              titulo: 'EBD',
-            },
-            {
-              id: 'oracao',
-              titulo: 'Oração',
-            },
-            {
-              id: 'pequenosGrupos',
-              titulo: 'PGs',
-            },
-            {
-              id: 'eventos',
-              titulo: 'Eventos',
-            },
-          ].map((aba) => (
-             <Text
-              key={aba.id}
-              onPress={() =>
-                setTipoSelecionado(
-                  aba.id as TipoAgenda
-                )
-              }
-              style={{
-                backgroundColor:
-                  tipoSelecionado === aba.id
-                    ? '#023411'
-                    : '#D5DED6',
+  <ScrollView
+  horizontal
+  showsHorizontalScrollIndicator={false}
+  contentContainerStyle={{
+    paddingHorizontal: 16,
+    gap: 6,
+    paddingTop: 16,
+    paddingBottom: 20,
+  }}
+>
+  {[
+    { id: 'cultos', titulo: 'Cultos' },
+    { id: 'ebd', titulo: 'EBD' },
+    { id: 'oracao', titulo: 'Oração' },
+    { id: 'pequenosGrupos', titulo: 'PGs' },
+    { id: 'eventos', titulo: 'Eventos' },
+  ].map((aba) => (
+    <Pressable
+      key={aba.id}
+      onPress={() =>
+        setTipoSelecionado(aba.id as TipoAgenda)
+      }
+      style={{
+        backgroundColor:
+          tipoSelecionado === aba.id
+            ? '#023411'
+            : '#D5DED6',
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+        borderRadius: 16,
+        marginRight: 6,
+      }}
+    >
+      <Text
+        style={{
+          color:
+            tipoSelecionado === aba.id
+              ? '#FFFFFF'
+              : '#023411',
+          fontSize: 12,
+          fontWeight: '700',
+        }}
+      >
+        {aba.titulo}
+      </Text>
+    </Pressable>
+  ))}
+</ScrollView>
 
-                color:
-                  tipoSelecionado === aba.id
-                    ? '#FFFFFF'
-                    : '#023411',
-
-                paddingHorizontal: 8,
-                paddingVertical: 6,
-                borderRadius: 16,
-
-                fontSize: 12,
-                fontWeight: '700',
-              }}
-            >
-              {aba.titulo}
-            </Text>
-          ))}
-        </ScrollView>
 
         {filtrarEventos(eventos).length === 0 ? (
           <EmptyState

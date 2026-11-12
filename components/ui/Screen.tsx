@@ -17,7 +17,7 @@ export default function Screen({
 }: Props) {
   return (
     <SafeAreaView
-      edges={['left', 'right', 'bottom']}
+      edges={['left', 'right']}
       style={[
         {
           flex: 1,

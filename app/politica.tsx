@@ -105,7 +105,7 @@ export default function PoliticaScreen() {
 
             Desenvolvido por:
 
-            Adriana Rosena
+            Igreja Presbiteriana Providência
 
             abcttecnologia@gmail.com
 

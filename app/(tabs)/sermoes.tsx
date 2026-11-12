@@ -1,6 +1,7 @@
-import { router, Stack } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   Pressable,
@@ -12,7 +13,6 @@ import AppHeader from '../../components/ui/AppHeader';
 import OfflineBanner from '../../components/ui/OfflineBanner';
 import RefreshableScroll from '../../components/ui/RefreshableScroll';
 import Screen from '../../components/ui/Screen';
-import ScreenLoader from '../../components/ui/ScreenLoader';
 
 import {
   getPlaylists,
@@ -20,350 +20,181 @@ import {
 } from '../../services/youtube';
 
 export default function SermoesScreen() {
-  const [secoes, setSecoes] =
-    useState<any[]>([]);
+  const [secoes, setSecoes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [offline, setOffline] = useState(false);
 
-  const [loading, setLoading] =
-    useState(true);
-
-  const [refreshing, setRefreshing] =
-    useState(false);
-
-  const [offline, setOffline] =
-    useState(false);
-
-  useEffect(() => {
-    carregarSermoes();
-  }, []);
-
-  async function carregarSermoes() {
+  // Função de carregar simplificada para evitar loops
+  const carregarSermoes = useCallback(async () => {
     try {
-      const resultado =
-        await getPlaylists();
+      const resultadoPlaylists = await getPlaylists();
+      
+      // Se a API retornar offline, avisamos mas tentamos processar o que vier
+      setOffline(resultadoPlaylists.offline || false);
 
-      setOffline(resultado.offline);
+      if (!resultadoPlaylists.data || resultadoPlaylists.data.length === 0) {
+        setSecoes([]);
+        return;
+      }
 
-      const playlistsOrdenadas =
-        ordenarPlaylists(resultado.data);
+      const playlistsOrdenadas = ordenarPlaylists(resultadoPlaylists.data);
 
-      const secoesComVideos =
-        await Promise.all(
-          playlistsOrdenadas.map(
-            async (playlist: any) => {
-              const videos =
-                await getPlaylistVideos(
-                  playlist.id
-                );
+      // Carregamento paralelo (mais rápido)
+      const secoesComVideosPromises = playlistsOrdenadas.map(async (playlist: any) => {
+        try {
+          const resultadoVideos = await getPlaylistVideos(playlist.id);
+          return {
+            offline: resultadoVideos.offline,
+            secao: resultadoVideos.data?.length > 0
+              ? {
+                  id: playlist.id,
+                  titulo: playlist.snippet.title,
+                  videos: resultadoVideos.data,
+                }
+              : null,
+          };
+        } catch (e) {
+          return { offline: true, secao: null };
+        }
+      });
 
-              return {
-                id: playlist.id,
-                titulo:
-                  playlist.snippet.title,
-                videos: videos.data,
-              };
-            }
-          )
-        );
+      const resultados = await Promise.all(secoesComVideosPromises);
+      setOffline(resultadoPlaylists.offline || resultados.some(resultado => resultado.offline));
+      setSecoes(resultados.map(resultado => resultado.secao).filter(secao => secao !== null));
 
-      setSecoes(
-        secoesComVideos.filter(
-          (secao: any) =>
-            secao.videos.length > 0
-        )
-      );
     } catch (error) {
-      console.log(
-        'ERRO AO CARREGAR SERMÕES:',
-        error
-      );
+      console.error('Erro ao carregar:', error);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function atualizar() {
-    setRefreshing(true);
-
-    try {
-      await carregarSermoes();
-    } finally {
       setRefreshing(false);
     }
-  }
+  }, []);
+
+  // Chama apenas uma vez ao montar a tela
+  useEffect(() => {
+    carregarSermoes();
+  }, []); 
+
+  const atualizar = () => {
+    setRefreshing(true);
+    carregarSermoes();
+  };
 
   function abrirVideo(video: any) {
-    const videoId =
-      video.snippet.resourceId?.videoId;
-
-    if (!videoId) {
-      console.log(
-        'VideoId não encontrado',
-        video
-      );
-      return;
-    }
+    const videoId = video.snippet.resourceId?.videoId || video.id;
+    if (!videoId) return;
 
     router.push({
       pathname: '/player',
-      params: {
-        videoId,
-        titulo: video.snippet.title,
-      },
+      params: { videoId, titulo: video.snippet.title },
     });
   }
-    if (loading) {
-    return (
-      <>
-        <Stack.Screen
-          options={{
-            headerShown: false,
-          }}
-        />
 
-        <Screen>
-          <ScreenLoader
-            message="Carregando sermões..."
-          />
-        </Screen>
-      </>
+  if (loading) {
+    return (
+      <Screen>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#023411" />
+          <Text style={{ marginTop: 10, color: '#546B5F' }}>Buscando sermões...</Text>
+        </View>
+      </Screen>
     );
   }
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
-      />
+    <Screen>
+      <AppHeader title="Sermões" />
+      <OfflineBanner visible={offline} />
 
-      <Screen>
-        <AppHeader title="Sermões" />
-
-        <OfflineBanner
-          visible={offline}
-        />
-
-        <RefreshableScroll
-          refreshing={refreshing}
-          onRefresh={atualizar}
-          contentContainerStyle={{
-            paddingBottom: 30,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 14,
-              color: '#546B5F',
-              textAlign: 'center',
-              marginBottom: 20,
-              paddingHorizontal: 30,
-              lineHeight: 18,
-            }}
-          >
-            Acompanhe nossas séries de sermões e
-            cresça no conhecimento das Escrituras.
-          </Text>
-
-          {secoes.map((secao: any) => (
-            <View
-              key={secao.id}
-              style={{
-                marginBottom: 16,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 14,
-                  fontWeight: '700',
-                  color: '#023411',
-                  marginLeft: 16,
-                  marginBottom: 8,
-                }}
-              >
-                {formatarTitulo(
-                  secao.titulo
-                )}
-              </Text>
-
-              <FlatList
-                horizontal
-                data={secao.videos}
-                keyExtractor={(item) =>
-                  item.id ||
-                  item.snippet.resourceId
-                    .videoId
-                }
-                showsHorizontalScrollIndicator={
-                  false
-                }
-                contentContainerStyle={{
-                  paddingLeft: 16,
-                  paddingRight: 12,
-                }}
-                renderItem={({ item }) => (
-                  <VideoCard
-                    video={item}
-                    onPress={() =>
-                      abrirVideo(item)
-                    }
-                  />
-                )}
-              />
-            </View>
-          ))}
-        </RefreshableScroll>
-      </Screen>
-    </>
-  );
-}
-function VideoCard({
-  video,
-  onPress,
-}: {
-  video: any;
-  onPress: () => void;
-}) {
-  const thumbnail =
-    video.snippet?.thumbnails?.high?.url ??
-    video.snippet?.thumbnails?.medium?.url ??
-    video.snippet?.thumbnails?.default?.url;
-
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        width: 120,
-        marginRight: 10,
-      }}
-    >
-      <View
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 18,
-          overflow: 'hidden',
-
-          shadowColor: '#000',
-          shadowOffset: {
-            width: 0,
-            height: 1,
-          },
-          shadowOpacity: 0.05,
-          shadowRadius: 2,
-          elevation: 1,
-        }}
+      <RefreshableScroll
+        refreshing={refreshing}
+        onRefresh={atualizar}
+        contentContainerStyle={{ paddingBottom: 30 }}
       >
-        <Image
-          source={{
-            uri: thumbnail,
-          }}
-          resizeMode="cover"
-          style={{
-            width: '100%',
-            height: 68,
-          }}
-        />
+        <Text style={{
+          fontSize: 14,
+          color: '#546B5F',
+          textAlign: 'center',
+          marginBottom: 20,
+          paddingHorizontal: 30,
+        }}>
+          Acompanhe nossas séries de sermões e cresça no conhecimento das Escrituras.
+        </Text>
 
-        <View
-          style={{
-            padding: 6,
-          }}
-        >
-          <Text
-            numberOfLines={2}
-            style={{
-              fontSize: 10,
+        {secoes.length === 0 && (
+          <View style={{ padding: 40, alignItems: 'center' }}>
+            <Text style={{ textAlign: 'center', color: '#546B5F' }}>
+              {offline ? "Você parece estar offline." : "Nenhum sermão encontrado."}
+            </Text>
+            <Pressable onPress={atualizar} style={{ marginTop: 20, padding: 10, backgroundColor: '#023411', borderRadius: 8 }}>
+              <Text style={{ color: '#FFF' }}>Tentar Novamente</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {secoes.map((secao) => (
+          <View key={secao.id} style={{ marginBottom: 16 }}>
+            <Text style={{
+              fontSize: 14,
               fontWeight: '700',
               color: '#023411',
-              lineHeight: 13,
-            }}
-          >
-            {limparTitulo(
-              video.snippet.title
-            )}
-          </Text>
-        </View>
-      </View>
-    </Pressable>
-  );
-}
-function ordenarPlaylists(
-  playlists: any[]
-) {
-  const prioridade = [
-    'Série em ATOS',
-    'Série em SAMUEL',
-    'Panorama Antigo Testamento',
-    'Panorama Novo Testamento',
-  ];
+              marginLeft: 16,
+              marginBottom: 8,
+            }}>
+              {secao.titulo.replace(/S[eé]rie em /i, '').trim()}
+            </Text>
 
-  return [...playlists].sort(
-    (a, b) => {
-      const tituloA =
-        a.snippet.title;
-
-      const tituloB =
-        b.snippet.title;
-
-      const indexA =
-        prioridade.findIndex(
-          (p) =>
-            normalizar(p) ===
-            normalizar(tituloA)
-        );
-
-      const indexB =
-        prioridade.findIndex(
-          (p) =>
-            normalizar(p) ===
-            normalizar(tituloB)
-        );
-
-      if (
-        indexA !== -1 &&
-        indexB !== -1
-      ) {
-        return indexA - indexB;
-      }
-
-      if (indexA !== -1) return -1;
-
-      if (indexB !== -1) return 1;
-
-      return tituloA.localeCompare(
-        tituloB
-      );
-    }
+            <FlatList
+              horizontal
+              data={secao.videos}
+              keyExtractor={(item) => item.id || (item.snippet?.resourceId?.videoId) || Math.random().toString()}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingLeft: 16, paddingRight: 12 }}
+              renderItem={({ item }) => (
+                <Pressable 
+                  onPress={() => abrirVideo(item)}
+                  style={{ width: 120, marginRight: 10 }}
+                >
+                  <View style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 18,
+                    overflow: 'hidden',
+                    elevation: 2,
+                  }}>
+                    <Image
+                      source={{ uri: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || 'https://via.placeholder.com/120x68' }}
+                      style={{ width: '100%', height: 68 }}
+                    />
+                    <View style={{ padding: 6 }}>
+                      <Text numberOfLines={2} style={{ fontSize: 10, fontWeight: '700', color: '#023411' }}>
+                        {item.snippet.title}
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+              )}
+            />
+          </View>
+        ))}
+      </RefreshableScroll>
+    </Screen>
   );
 }
 
-function normalizar(
-  texto: string
-) {
-  return texto
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(
-      /[\u0300-\u036f]/g,
-      ''
-    )
-    .trim();
-}
+// Funções auxiliares mantidas fora do componente para performance
+function ordenarPlaylists(playlists: any[]) {
+  const prioridade = ['Série em ATOS', 'Série em SAMUEL', 'Panorama Antigo Testamento', 'Panorama Novo Testamento'];
+  const normalizar = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
-function formatarTitulo(
-  titulo: string
-) {
-  return titulo
-    .replace('Série em ', '')
-    .replace('Serie em ', '')
-    .trim();
-}
-
-function limparTitulo(
-  titulo: string
-) {
-  return titulo
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&');
+  return [...playlists].sort((a, b) => {
+    const tA = a.snippet.title;
+    const tB = b.snippet.title;
+    const idxA = prioridade.findIndex(p => normalizar(p) === normalizar(tA));
+    const idxB = prioridade.findIndex(p => normalizar(p) === normalizar(tB));
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return tA.localeCompare(tB);
+  });
 }

@@ -2,6 +2,7 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
+  Alert,
   Linking,
   Pressable,
   Text,
@@ -15,6 +16,7 @@ import RefreshableScroll from '../../components/ui/RefreshableScroll';
 import Screen from '../../components/ui/Screen';
 
   import { getLinks } from '../../services/config';
+  import { logout } from '../../services/auth';
 
   export default function MaisScreen() {
     const [links, setLinks] =
@@ -24,6 +26,9 @@ import Screen from '../../components/ui/Screen';
       useState(false);
 
     const [refreshing, setRefreshing] =
+      useState(false);
+
+    const [saindo, setSaindo] =
       useState(false);
 
     useEffect(() => {
@@ -100,6 +105,25 @@ import Screen from '../../components/ui/Screen';
 
     function abrirPolitica() {
       router.push('/politica');
+    }
+
+    async function sair() {
+      if (saindo) return;
+
+      setSaindo(true);
+
+      try {
+        await logout();
+        router.replace('/welcome');
+      } catch (error) {
+        console.error('Erro ao sair da conta:', error);
+        Alert.alert(
+          'Não foi possível sair',
+          'Tente novamente em alguns instantes.',
+        );
+      } finally {
+        setSaindo(false);
+      }
     }
 
     const cardStyle: ViewStyle = {
@@ -315,6 +339,40 @@ import Screen from '../../components/ui/Screen';
               </Text>
             </Pressable>
           </View>
+
+          <Pressable
+            onPress={sair}
+            disabled={saindo}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: saindo }}
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'center',
+              alignItems: 'center',
+              backgroundColor: '#023411',
+              borderRadius: 16,
+              marginHorizontal: 24,
+              marginTop: 24,
+              paddingVertical: 14,
+              opacity: saindo ? 0.6 : 1,
+            }}
+          >
+            <Ionicons
+              name="log-out-outline"
+              size={20}
+              color="#FFFFFF"
+            />
+            <Text
+              style={{
+                color: '#FFFFFF',
+                fontSize: 14,
+                fontWeight: '700',
+                marginLeft: 8,
+              }}
+            >
+              {saindo ? 'Saindo...' : 'Sair da conta'}
+            </Text>
+          </Pressable>
         </RefreshableScroll>
       </Screen>
     );

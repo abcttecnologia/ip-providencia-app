@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Linking, Text, View } from 'react-native';
+import Hyperlink from 'react-native-hyperlink';
 
 import AppCard from '../components/ui/AppCard';
 import AppHeader from '../components/ui/AppHeader';
@@ -31,7 +32,7 @@ export default function AvisosScreen() {
 
       const dados = resultado.data;
 
-      dados.sort((a, b) => {
+      dados.sort((a: any, b: any) => {
         if (a.importante === b.importante) return 0;
         return a.importante ? -1 : 1;
       });
@@ -145,15 +146,24 @@ export default function AvisosScreen() {
                   {aviso.titulo}
                 </Text>
 
-                <Text
-                  style={{
-                    fontSize: 14,
-                    color: '#555',
-                    lineHeight: 24,
-                  }}
-                >
-                  {aviso.descricao}
-                </Text>
+<Hyperlink
+  linkStyle={{
+    color: '#0A7C3B',
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  }}
+  onPress={(url) => Linking.openURL(url)}
+>
+  <Text
+    style={{
+      fontSize: 14,
+      color: '#555',
+      lineHeight: 24,
+    }}
+  >
+    {aviso.descricao}
+  </Text>
+</Hyperlink>
 
                 {aviso.data ? (
                   <Text

@@ -1,0 +1,461 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function hasUserProfile() {
+      return signedIn() && exists(userPath(request.auth.uid));
+    }
+
+    function currentUser() {
+      return get(userPath(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return hasUserProfile()
+        && currentUser().ativo == true
+        && currentUser().perfil == 'ADMINISTRADOR';
+    }
+
+    function isMember() {
+      return hasUserProfile()
+        && currentUser().ativo == true
+        && currentUser().perfil == 'MEMBRO';
+    }
+
+    function isMemberOrAdmin() {
+      return isMember() || isAdmin();
+    }
+
+    function audienceOf(data) {
+      return data.keys().hasAny(['publico']) ? data.publico : 'todos';
+    }
+
+    function canReadAudience(data) {
+      return isAdmin()
+        || audienceOf(data) == 'todos'
+        || (audienceOf(data) == 'membros' && isMemberOrAdmin())
+        || (
+          audienceOf(data) == 'ministerio'
+          && isMemberOrAdmin()
+          && data.alvoId is string
+          && currentUser().ministerios is list
+          && currentUser().ministerios.hasAny([data.alvoId])
+        )
+        || (
+          audienceOf(data) == 'pg'
+          && isMemberOrAdmin()
+          && data.alvoId is string
+          && currentUser().pequenoGrupoId == data.alvoId
+        );
+    }
+
+    function validAudience(data) {
+      return data.keys().hasAny(['publico'])
+        && data.publico in ['todos', 'membros', 'ministerio', 'pg']
+        && (
+          (
+            data.publico in ['todos', 'membros']
+            && (
+              !data.keys().hasAny(['alvoId'])
+              || data.alvoId == null
+            )
+          )
+          || (
+            data.publico in ['ministerio', 'pg']
+            && data.alvoId is string
+            && data.alvoId.size() > 0
+          )
+        );
+    }
+
+    function validOptionalUserFields(data) {
+      return (
+          !data.keys().hasAny(['telefone'])
+          || data.telefone is string
+        )
+        && (
+          !data.keys().hasAny(['endereco'])
+          || data.endereco is string
+        )
+        && (
+          !data.keys().hasAny(['dataNascimento'])
+          || data.dataNascimento is string
+        )
+        && (
+          !data.keys().hasAny(['estadoCivil'])
+          || data.estadoCivil is string
+        )
+        && (
+          !data.keys().hasAny(['fotoUrl'])
+          || data.fotoUrl is string
+        )
+        && (
+          !data.keys().hasAny(['familiaId'])
+          || data.familiaId == null
+          || data.familiaId is string
+        )
+        && (
+          !data.keys().hasAny(['pequenoGrupoId'])
+          || data.pequenoGrupoId == null
+          || data.pequenoGrupoId is string
+        )
+        && (
+          !data.keys().hasAny(['salaEbdId'])
+          || data.salaEbdId == null
+          || data.salaEbdId is string
+        )
+        && (
+          !data.keys().hasAny(['ministerios'])
+          || data.ministerios is list
+        );
+    }
+
+    function validProfileUpdate(data) {
+      return (
+          !data.keys().hasAny(['perfil'])
+          || data.perfil in ['VISITANTE', 'MEMBRO', 'ADMINISTRADOR']
+        )
+        && (
+          !data.keys().hasAny(['ativo'])
+          || data.ativo is bool
+        )
+        && validOptionalUserFields(data);
+    }
+
+    function ownsToken(tokenData) {
+      return signedIn() && tokenData.uid == request.auth.uid;
+    }
+
+    function belongsToSmallGroup(groupId) {
+      return isMemberOrAdmin()
+        && currentUser().pequenoGrupoId == groupId;
+    }
+
+    function validPrayerSharing(data) {
+      return (
+          data.compartilhadoComPg == false
+          && data.pequenoGrupoId == null
+        )
+        || (
+          data.compartilhadoComPg == true
+          && data.pequenoGrupoId is string
+          && isMember()
+          && currentUser().pequenoGrupoId == data.pequenoGrupoId
+        );
+    }
+
+    function validPrayerCreate(data) {
+      return data.keys().hasAll([
+          'autorUid',
+          'texto',
+          'compartilhadoComPg',
+          'pequenoGrupoId',
+          'status',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.keys().hasOnly([
+          'autorUid',
+          'texto',
+          'compartilhadoComPg',
+          'pequenoGrupoId',
+          'status',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.texto is string
+        && data.texto.size() > 0
+        && data.status == 'aberto'
+        && data.criadoEm == request.time
+        && data.atualizadoEm == request.time
+        && (
+          (
+            !signedIn()
+            && data.autorUid == null
+            && data.compartilhadoComPg == false
+            && data.pequenoGrupoId == null
+          )
+          || (
+            signedIn()
+            && data.autorUid == request.auth.uid
+            && validPrayerSharing(data)
+          )
+        );
+    }
+
+    match /Avisos/{documentId} {
+      allow get, list: if canReadAudience(resource.data);
+      allow create: if isAdmin()
+        && validAudience(request.resource.data)
+        && (
+          !request.resource.data.keys().hasAny(['categoria'])
+          || request.resource.data.categoria in [
+            'geral',
+            'ministerio',
+            'comunhao'
+          ]
+        );
+      allow update: if isAdmin()
+        && validAudience(request.resource.data)
+        && (
+          !request.resource.data.keys().hasAny(['categoria'])
+          || request.resource.data.categoria in [
+            'geral',
+            'ministerio',
+            'comunhao'
+          ]
+        );
+      allow delete: if isAdmin();
+    }
+
+    match /biblioteca/{documentId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /campanha/{documentId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /config/{documentId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /eventos/{documentId} {
+      allow get, list: if canReadAudience(resource.data);
+      allow create, update: if isAdmin()
+        && validAudience(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /versiculo/{documentId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /pushTokens/{tokenId} {
+      allow read: if isAdmin() || ownsToken(resource.data);
+      allow create: if isAdmin() || (
+        ownsToken(request.resource.data)
+        && request.resource.data.keys().hasAll([
+          'uid',
+          'plataforma',
+          'ativo',
+          'atualizadoEm'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'plataforma',
+          'ativo',
+          'atualizadoEm'
+        ])
+        && request.resource.data.plataforma in ['ios', 'android']
+        && request.resource.data.ativo == true
+        && request.resource.data.atualizadoEm == request.time
+      );
+      allow update: if isAdmin()
+        || (
+          ownsToken(resource.data)
+          && ownsToken(request.resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'plataforma',
+            'ativo',
+            'atualizadoEm'
+          ])
+          && request.resource.data.plataforma in ['ios', 'android']
+          && request.resource.data.ativo == true
+          && request.resource.data.atualizadoEm == request.time
+        );
+      allow delete: if isAdmin() || ownsToken(resource.data);
+    }
+
+    match /users/{uid} {
+      allow get: if (signedIn() && request.auth.uid == uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasAll([
+          'uid',
+          'email',
+          'nome',
+          'perfil',
+          'ativo',
+          'ministerios',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'email',
+          'nome',
+          'perfil',
+          'ativo',
+          'ministerios',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.nome is string
+        && request.resource.data.perfil == 'VISITANTE'
+        && request.resource.data.ativo == true
+        && request.resource.data.ministerios is list
+        && request.resource.data.ministerios.size() == 0
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if (
+          signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'nome',
+            'telefone',
+            'endereco',
+            'dataNascimento',
+            'estadoCivil',
+            'fotoUrl',
+            'atualizadoEm'
+          ])
+          && request.resource.data.atualizadoEm == request.time
+          && validOptionalUserFields(request.resource.data)
+        )
+        || (
+          isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'nome',
+            'telefone',
+            'endereco',
+            'dataNascimento',
+            'estadoCivil',
+            'fotoUrl',
+            'perfil',
+            'ativo',
+            'ministerios',
+            'pequenoGrupoId',
+            'salaEbdId',
+            'familiaId',
+            'membroDesde',
+            'atualizadoEm'
+          ])
+          && request.resource.data.atualizadoEm == request.time
+          && validProfileUpdate(request.resource.data)
+        );
+      allow delete: if isAdmin();
+    }
+
+    match /ministerios/{ministerioId} {
+      allow get: if isAdmin()
+        || (
+          isMember()
+          && currentUser().ministerios is list
+          && currentUser().ministerios.hasAny([ministerioId])
+        );
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /pequenosGrupos/{grupoId} {
+      allow get, list: if isAdmin()
+        || resource.data.ativo == true
+        || belongsToSmallGroup(grupoId);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /salasEbd/{salaId} {
+      allow get: if isAdmin()
+        || (isMember() && currentUser().salaEbdId == salaId);
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /familias/{familiaId} {
+      allow get: if isAdmin()
+        || (isMember() && currentUser().familiaId == familiaId);
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /pedidosOracao/{pedidoId} {
+      allow get, list: if isAdmin()
+        || (
+          signedIn()
+          && resource.data.autorUid == request.auth.uid
+        )
+        || (
+          resource.data.compartilhadoComPg == true
+          && belongsToSmallGroup(resource.data.pequenoGrupoId)
+        );
+      allow create: if validPrayerCreate(request.resource.data);
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && resource.data.autorUid == request.auth.uid
+          && request.resource.data.autorUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'texto',
+            'compartilhadoComPg',
+            'pequenoGrupoId',
+            'atualizadoEm'
+          ])
+          && request.resource.data.texto is string
+          && request.resource.data.texto.size() > 0
+          && request.resource.data.atualizadoEm == request.time
+          && validPrayerSharing(request.resource.data)
+        );
+      allow delete: if isAdmin()
+        || (
+          signedIn()
+          && resource.data.autorUid == request.auth.uid
+        );
+    }
+
+    match /anotacoes/{anotacaoId} {
+      allow get, list: if signedIn()
+        && resource.data.uid == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll([
+          'uid',
+          'titulo',
+          'conteudo',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'titulo',
+          'conteudo',
+          'referenciaBiblica',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.titulo is string
+        && request.resource.data.conteudo is string
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'titulo',
+          'conteudo',
+          'referenciaBiblica',
+          'atualizadoEm'
+        ])
+        && request.resource.data.titulo is string
+        && request.resource.data.conteudo is string
+        && request.resource.data.atualizadoEm == request.time;
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid;
+    }
+  }
+}

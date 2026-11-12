@@ -1,12 +1,32 @@
 import { lerCache, salvarCache } from './cache';
-import { ServiceResult } from './types';
+import { requireEnv } from './env';
+import type { ServiceResult } from '../types/firestore';
 
-const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_CALENDAR_API_KEY!;
+interface GoogleCalendarEvent {
+  id: string;
+  summary: string;
+  description?: string;
+  start: {
+    dateTime?: string;
+    date?: string;
+  };
+  end?: {
+    dateTime?: string;
+    date?: string;
+  };
+}
+
+const API_KEY = requireEnv(
+  'EXPO_PUBLIC_GOOGLE_API_KEY',
+  process.env.EXPO_PUBLIC_GOOGLE_API_KEY,
+);
 
 const CALENDAR_ID =
   'igrejapresbiterianadonoroeste@gmail.com';
 
-export async function getEventos(): Promise<ServiceResult<any[]>> {
+export async function getEventos(): Promise<
+  ServiceResult<GoogleCalendarEvent[]>
+> {
   try {
     const agora = new Date().toISOString();
 
@@ -14,9 +34,17 @@ export async function getEventos(): Promise<ServiceResult<any[]>> {
       `https://www.googleapis.com/calendar/v3/calendars/${CALENDAR_ID}/events?orderBy=startTime&singleEvents=true&timeMin=${agora}&maxResults=20&key=${API_KEY}`
     );
 
-    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Google Calendar API respondeu ${response.status}`);
+    }
 
-    const eventos = data.items ?? [];
+    const data: { items?: GoogleCalendarEvent[] } = await response.json();
+
+    const eventos = (data.items ?? []).map((evento) => ({
+      ...evento,
+      summary: evento.summary ?? '',
+      start: evento.start ?? {},
+    }));
 
     await salvarCache('agenda', eventos);
 
@@ -25,11 +53,12 @@ export async function getEventos(): Promise<ServiceResult<any[]>> {
       offline: false,
     };
   } catch (error) {
-    console.log('Usando cache da agenda');
+    console.warn('Falha ao carregar a agenda; usando cache:', error);
+    const cache = await lerCache<GoogleCalendarEvent[]>('agenda');
 
     return {
-      data: (await lerCache<any[]>('agenda')) ?? [],
-      offline: true,
+      data: cache ?? [],
+      offline: Boolean(cache?.length),
     };
   }
 }

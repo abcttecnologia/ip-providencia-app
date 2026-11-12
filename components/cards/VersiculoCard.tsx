@@ -5,7 +5,6 @@ import {
   View,
 } from 'react-native';
 
-import OfflineBanner from '../ui/OfflineBanner';
 
 import { getVersiculo } from '../../services/versiculo';
 
@@ -53,7 +52,6 @@ export default function VersiculoCard() {
 
   return (
     <>
-      <OfflineBanner visible={offline} />
 
       <View
         style={{
@@ -125,7 +123,7 @@ export default function VersiculoCard() {
                 marginBottom: 8,
               }}
             >
-              🙏 Oração
+              Oração
             </Text>
 
             <Text

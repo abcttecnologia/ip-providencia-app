@@ -1,74 +1,102 @@
 import {
+  addDoc,
   collection,
   doc,
   getDoc,
   getDocs,
-  orderBy,
-  query,
+  serverTimestamp,
+  updateDoc,
 } from 'firebase/firestore';
 
+import type { Evento, Publico } from '../types/firestore';
+import { canReadAudience, getAudienceQueries } from './audience';
 import { lerCache, salvarCache } from './cache';
 import { db } from './firebase';
 
-// Lista todos os eventos
-export async function getEventos() {
+export type EventoInput = Omit<Evento, 'id' | 'criadoEm' | 'atualizadoEm'> & {
+  publico: Publico;
+};
+
+function eventoOrdem(evento: Evento) {
+  return evento.ordem ?? 0;
+}
+
+export async function getEventos(): Promise<Evento[]> {
+  const audience = await getAudienceQueries('eventos');
+  const cacheKey = `eventos_v2_${audience.cacheScope}`;
+
   try {
-    const q = query(
-      collection(db, 'eventos'),
-      orderBy('ordem')
+    const snapshots = await Promise.all(
+      audience.queries.map((audienceQuery) => getDocs(audienceQuery)),
     );
+    const eventosById = new Map<string, Evento>();
 
-    const snapshot = await getDocs(q);
+    for (const snapshot of snapshots) {
+      for (const eventoDoc of snapshot.docs) {
+        eventosById.set(eventoDoc.id, {
+          id: eventoDoc.id,
+          ...(eventoDoc.data() as Omit<Evento, 'id'>),
+        });
+      }
+    }
 
-    const dados = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    // Salva no cache
-    await salvarCache('eventos', dados);
-
-    return dados;
-
+    const eventos = [...eventosById.values()].sort(
+      (left, right) => eventoOrdem(left) - eventoOrdem(right),
+    );
+    await salvarCache(cacheKey, eventos);
+    return eventos;
   } catch (error) {
-    console.log('Usando cache dos eventos');
-
-    const cache = await lerCache<any[]>('eventos');
-
-    return cache ?? [];
+    console.warn('Falha ao carregar eventos; usando cache:', error);
+    const cache = await lerCache<Evento[]>(cacheKey);
+    return (
+      cache?.filter((evento) => canReadAudience(evento, audience.user)) ?? []
+    );
   }
 }
 
-// Busca um único evento
-export async function getEvento(id: string) {
+export async function getEvento(id: string): Promise<Evento> {
+  const audience = await getAudienceQueries('eventos');
+  const cacheKey = `evento_v2_${audience.cacheScope}_${id}`;
+
   try {
     const docRef = doc(db, 'eventos', id);
-
     const snapshot = await getDoc(docRef);
 
     if (!snapshot.exists()) {
       throw new Error('Evento não encontrado');
     }
 
-    const dados = {
+    const evento = {
       id: snapshot.id,
-      ...snapshot.data(),
-    };
+      ...(snapshot.data() as Omit<Evento, 'id'>),
+    } satisfies Evento;
 
-    // Salva o evento individual
-    await salvarCache(`evento_${id}`, dados);
-
-    return dados;
-
+    await salvarCache(cacheKey, evento);
+    return evento;
   } catch (error) {
-    console.log('Usando cache do evento');
-
-    const cache = await lerCache(`evento_${id}`);
-
-    if (cache) {
+    console.warn('Falha ao carregar evento; tentando cache:', error);
+    const cache = await lerCache<Evento>(cacheKey);
+    if (cache && canReadAudience(cache, audience.user)) {
       return cache;
     }
-
     throw error;
   }
+}
+
+export async function createEvento(evento: EventoInput) {
+  return addDoc(collection(db, 'eventos'), {
+    ...evento,
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+  });
+}
+
+export async function updateEvento(
+  id: string,
+  changes: Partial<EventoInput>,
+) {
+  await updateDoc(doc(db, 'eventos', id), {
+    ...changes,
+    atualizadoEm: serverTimestamp(),
+  });
 }

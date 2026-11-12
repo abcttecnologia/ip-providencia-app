@@ -1,0 +1,83 @@
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
+
+import type {
+  AppUser,
+  UserAccessUpdate,
+  UserPersonalUpdate,
+} from "../types/user";
+import { db } from "./firebase";
+
+export async function createUser(
+  user: Pick<AppUser, "uid" | "email" | "nome">,
+) {
+  const userRef = doc(db, "users", user.uid);
+  const snapshot = await getDoc(userRef);
+
+  if (snapshot.exists()) return;
+
+  await setDoc(userRef, {
+    uid: user.uid,
+    email: user.email,
+    nome: user.nome,
+    perfil: "VISITANTE",
+    ativo: true,
+    ministerios: [],
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+  });
+}
+
+export async function ensureUserProfile(
+  uid: string,
+  email: string | null,
+  nome?: string,
+) {
+  const emailUsuario = email ?? "";
+
+  try {
+    await createUser({
+      uid,
+      email: emailUsuario,
+      nome: nome || emailUsuario.split("@")[0] || "Visitante",
+    });
+  } catch (error) {
+    console.error("Falha ao verificar ou criar perfil no Firestore:", error);
+    throw error;
+  }
+}
+
+export async function getUser(uid: string) {
+  const snapshot = await getDoc(doc(db, "users", uid));
+
+  if (!snapshot.exists()) {
+    return null;
+  }
+
+  return snapshot.data() as AppUser;
+}
+
+export async function updateOwnProfile(
+  uid: string,
+  changes: UserPersonalUpdate,
+) {
+  await updateDoc(doc(db, "users", uid), {
+    ...changes,
+    atualizadoEm: serverTimestamp(),
+  });
+}
+
+export async function updateUserAccess(
+  uid: string,
+  changes: UserAccessUpdate,
+) {
+  await updateDoc(doc(db, "users", uid), {
+    ...changes,
+    atualizadoEm: serverTimestamp(),
+  });
+}

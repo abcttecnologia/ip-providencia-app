@@ -1,6 +1,9 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import { AndroidImportance } from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert, Platform } from 'react-native';
 
 import {
   doc,
@@ -8,7 +11,12 @@ import {
   setDoc,
 } from 'firebase/firestore';
 
-import { db } from './firebase';
+import { auth, db } from './firebase';
+
+const PERMISSION_DECLINED_KEY = '@ip-providencia/push-notifications-declined';
+const ANDROID_CHANNEL_ID = 'default';
+
+let registrationInProgress: Promise<void> | null = null;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -19,52 +27,101 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function registrarNotificacoes() {
-  if (!Device.isDevice) return;
-
-  const { status: existingStatus } =
-    await Notifications.getPermissionsAsync();
-
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== 'granted') {
-    const { status } =
-      await Notifications.requestPermissionsAsync();
-
-    finalStatus = status;
+export function registrarNotificacoes(): Promise<void> {
+  if (!registrationInProgress) {
+    registrationInProgress = registrarNotificacoesInterno().finally(() => {
+      registrationInProgress = null;
+    });
   }
 
-  if (finalStatus !== 'granted') {
+  return registrationInProgress;
+}
+
+async function registrarNotificacoesInterno() {
+  if (!Device.isDevice || (Platform.OS !== 'ios' && Platform.OS !== 'android')) {
     return;
   }
 
-  const projectId =
-    Constants.expoConfig?.extra?.eas?.projectId ??
-    Constants.easConfig?.projectId;
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
 
-  const token = (
-    await Notifications.getExpoPushTokenAsync({
-      projectId,
-    })
-  ).data;
-  
-try {
-  await setDoc(
-    doc(db, 'pushTokens', token),
-    {
-      token,
-      plataforma: Device.osName,
-      dispositivo: Device.modelName,
-      ativo: true,
-      criadoEm: serverTimestamp(),
-      atualizadoEm: serverTimestamp(),
-    },
-    { merge: true }
-  );
+  try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+        name: 'Notificações',
+        importance: AndroidImportance.DEFAULT,
+      });
+    }
 
-  console.log('Push Token:', token);
+    let permission = await Notifications.getPermissionsAsync();
 
-} catch (error) {
-  console.log('Não foi possível registrar o Push Token.');
+    if (!permission.granted) {
+      if (permission.status !== 'undetermined') return;
+      if (await AsyncStorage.getItem(PERMISSION_DECLINED_KEY)) return;
+
+      const accepted = await solicitarPermissao();
+      if (!accepted) {
+        await AsyncStorage.setItem(PERMISSION_DECLINED_KEY, 'true');
+        return;
+      }
+
+      permission = await Notifications.requestPermissionsAsync();
+      if (!permission.granted) {
+        await AsyncStorage.setItem(PERMISSION_DECLINED_KEY, 'true');
+        return;
+      }
+
+      await AsyncStorage.removeItem(PERMISSION_DECLINED_KEY);
+    }
+
+    if (auth.currentUser?.uid !== uid) return;
+
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId;
+
+    if (!projectId) {
+      throw new Error('O EAS projectId não está configurado no app.json.');
+    }
+
+    const token = (
+      await Notifications.getExpoPushTokenAsync({ projectId })
+    ).data;
+
+    if (auth.currentUser?.uid !== uid) return;
+
+    await setDoc(
+      doc(db, 'pushTokens', token),
+      {
+        uid,
+        plataforma: Platform.OS,
+        ativo: true,
+        atualizadoEm: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  } catch (error) {
+    console.error('Falha ao registrar notificações push:', error);
+  }
 }
+
+function solicitarPermissao(): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert(
+      'Receber notificações?',
+      'Podemos avisar você sobre comunicados e atividades da IP Providência. Você pode mudar essa opção nas configurações do celular.',
+      [
+        {
+          text: 'Agora não',
+          style: 'cancel',
+          onPress: () => resolve(false),
+        },
+        {
+          text: 'Permitir',
+          onPress: () => resolve(true),
+        },
+      ],
+      { cancelable: false },
+    );
+  });
 }

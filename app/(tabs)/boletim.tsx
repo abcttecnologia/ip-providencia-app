@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   SafeAreaView,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 
@@ -15,26 +17,35 @@ import { getLinks } from '../../services/config';
 export default function BoletimScreen() {
   const [boletim, setBoletim] = useState('');
   const [offline, setOffline] = useState(false);
+  const [erroCarregamento, setErroCarregamento] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
-    carregarBoletim();
-  }, []);
+    let ativo = true;
 
-  async function carregarBoletim() {
-    try {
-      const resultado = await getLinks();
+    getLinks()
+      .then((resultado) => {
+        if (!ativo) return;
 
-      setOffline(resultado.offline);
+        const url = resultado.data?.boletim ?? '';
+        setOffline(resultado.offline && Boolean(url));
+        setBoletim(url);
+        setErroCarregamento(!url);
+      })
+      .catch((error) => {
+        if (!ativo) return;
 
-      setBoletim(
-        resultado.data?.boletim ?? ''
-      );
-    } catch (error) {
-      console.log(error);
-    }
-  }
+        console.error('Erro ao buscar o link do Boletim:', error);
+        setOffline(false);
+        setErroCarregamento(true);
+      });
 
-  if (!boletim) {
+    return () => {
+      ativo = false;
+    };
+  }, [tentativa]);
+
+  if (!boletim && !erroCarregamento) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator
@@ -49,18 +60,51 @@ export default function BoletimScreen() {
     <SafeAreaView style={styles.container}>
       <OfflineBanner visible={offline} />
 
-      <WebView
-        source={{ uri: boletim }}
-        startInLoadingState
-        renderLoading={() => (
-          <View style={styles.loading}>
-            <ActivityIndicator
-              size="large"
-              color="#1E5631"
-            />
-          </View>
-        )}
-      />
+      {erroCarregamento ? (
+        <View style={styles.loading}>
+          <Text style={styles.errorText}>
+            Não foi possível carregar o Boletim. Verifique sua conexão e tente novamente.
+          </Text>
+          <Pressable
+            onPress={() => {
+              setBoletim('');
+              setOffline(false);
+              setErroCarregamento(false);
+              setTentativa((valor) => valor + 1);
+            }}
+          >
+            <Text style={styles.retryText}>Tentar novamente</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <WebView
+          key={tentativa}
+          source={{ uri: boletim }}
+          startInLoadingState
+          onLoad={() => {
+            setOffline(false);
+            setErroCarregamento(false);
+          }}
+          onError={({ nativeEvent }) => {
+            console.error('Erro ao carregar o Boletim:', nativeEvent);
+            setOffline(false);
+            setErroCarregamento(true);
+          }}
+          onHttpError={({ nativeEvent }) => {
+            console.error('Erro HTTP ao carregar o Boletim:', nativeEvent);
+            setOffline(false);
+            setErroCarregamento(true);
+          }}
+          renderLoading={() => (
+            <View style={styles.loading}>
+              <ActivityIndicator
+                size="large"
+                color="#1E5631"
+              />
+            </View>
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -74,5 +118,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+
+  errorText: {
+    color: '#546B5F',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+
+  retryText: {
+    color: '#1E5631',
+    fontWeight: '700',
   },
 });

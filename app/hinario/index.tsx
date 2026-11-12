@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import {
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 
 import { hinos } from '../../services/hinos';

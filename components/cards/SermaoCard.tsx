@@ -15,9 +15,12 @@ export default function SermaoCard({
 }: Props) {
   if (!video) return null;
 
+  // Busca o videoId em múltiplas estruturas possíveis da API YouTube
   const videoId =
     video.id?.videoId ??
-    video.snippet?.resourceId?.videoId;
+    video.id ??
+    video.snippet?.resourceId?.videoId ??
+    video.resourceId?.videoId;
 
   if (!videoId) return null;
 
@@ -26,6 +29,8 @@ export default function SermaoCard({
     video.snippet?.thumbnails?.medium?.url ??
     video.snippet?.thumbnails?.default?.url;
 
+  const titulo = video.snippet?.title ?? video.title;
+
   return (
     <Pressable
       onPress={() =>
@@ -33,7 +38,7 @@ export default function SermaoCard({
           pathname: '/player',
           params: {
             videoId,
-            titulo: video.snippet.title,
+            titulo,
           },
         })
       }
@@ -94,7 +99,7 @@ export default function SermaoCard({
             color: '#023411',
           }}
         >
-          {video.snippet.title}
+          {titulo}
         </Text>
       </View>
     </Pressable>

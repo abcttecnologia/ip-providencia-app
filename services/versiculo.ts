@@ -1,10 +1,12 @@
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 
+import type { ServiceResult, Versiculo } from '../types/firestore';
 import { lerCache, salvarCache } from './cache';
 import { db } from './firebase';
-import { ServiceResult } from './types';
 
-export async function getVersiculo(): Promise<ServiceResult<any | null>> {
+export async function getVersiculo(): Promise<
+  ServiceResult<Versiculo | null>
+> {
   try {
     const ref = doc(db, 'versiculo', 'versiculo');
 
@@ -17,7 +19,7 @@ export async function getVersiculo(): Promise<ServiceResult<any | null>> {
       };
     }
 
-    const dados = snap.data();
+    const dados = snap.data() as Versiculo;
 
     await salvarCache('versiculo', dados);
 
@@ -26,11 +28,22 @@ export async function getVersiculo(): Promise<ServiceResult<any | null>> {
       offline: false,
     };
   } catch (error) {
-    console.log('Usando cache do versículo');
+    console.warn('Falha ao carregar o versículo; usando cache:', error);
 
     return {
-      data: await lerCache('versiculo'),
+      data: await lerCache<Versiculo | null>('versiculo'),
       offline: true,
     };
   }
+}
+
+export async function updateVersiculo(versiculo: Versiculo) {
+  await setDoc(
+    doc(db, 'versiculo', 'versiculo'),
+    {
+      ...versiculo,
+      atualizadoEm: serverTimestamp(),
+    },
+    { merge: true },
+  );
 }
