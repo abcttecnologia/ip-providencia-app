@@ -3,6 +3,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-naviga
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -14,11 +15,25 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         void registrarNotificacoes();
       }
     });
+
+    const appStateSubscription = AppState.addEventListener(
+      'change',
+      (state) => {
+        if (state === 'active' && auth.currentUser) {
+          void registrarNotificacoes();
+        }
+      },
+    );
+
+    return () => {
+      unsubscribeAuth();
+      appStateSubscription.remove();
+    };
   }, []);
 
   return (
