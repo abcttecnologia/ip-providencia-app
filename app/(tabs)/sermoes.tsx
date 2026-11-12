@@ -104,7 +104,7 @@ export default function SermoesScreen() {
 
   return (
     <Screen>
-      <AppHeader title="Sermões" />
+      <AppHeader title="Sermões" showBack={false} />
       <OfflineBanner visible={offline} />
 
       <RefreshableScroll

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   Pressable,
   ScrollView,
@@ -33,7 +34,13 @@ type TipoAgenda =
   | 'ebd'
   | 'eventos';
 
-export default function AgendaScreen() {
+type AgendaScreenProps = {
+  showBack?: boolean;
+};
+
+export default function AgendaScreen({
+  showBack = true,
+}: AgendaScreenProps) {
   const [tipoSelecionado, setTipoSelecionado] =
     useState<TipoAgenda>('cultos');
 
@@ -49,11 +56,7 @@ export default function AgendaScreen() {
   const [offline, setOffline] =
     useState(false);
 
-  useEffect(() => {
-    carregarEventos();
-  }, []);
-
-  async function carregarEventos() {
+  const carregarEventos = useCallback(async () => {
     try {
       const resultado = await getEventos();
 
@@ -65,7 +68,13 @@ export default function AgendaScreen() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void carregarEventos();
+    }, [carregarEventos]),
+  );
 
   async function atualizar() {
     setRefreshing(true);
@@ -144,7 +153,7 @@ export default function AgendaScreen() {
 
   return (
     <Screen>
-      <AppHeader title="Agenda" />
+      <AppHeader title="Agenda" showBack={showBack} />
 
       <OfflineBanner visible={offline} />
 

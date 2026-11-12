@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { View } from 'react-native';
 
 import AvisosCard from '../../components/cards/AvisosCard';
+import BoletimCard from '../../components/cards/BoletimCard';
 import EventoCard from '../../components/cards/EventoCard';
 import Header from '../../components/cards/Header';
 import MenuCard from '../../components/cards/MenuCard';
@@ -23,65 +25,67 @@ const [avisos, setAvisos] = useState<any[]>([]);
 
 const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    carregarTudo();
+  const carregarUltimoVideo = useCallback(async () => {
+    try {
+      const resultado = await getVideos();
+
+      setUltimoVideo(resultado.data[0] ?? null);
+    } catch (error) {
+      console.error('Erro ao carregar o último vídeo:', error);
+    }
   }, []);
 
+  const carregarProximoEvento = useCallback(async () => {
+    try {
+      const resultado = await getEventos();
 
-  async function carregarTudo() {
+      setProximoEvento(resultado.data[0] ?? null);
+    } catch (error) {
+      console.error('Erro ao carregar o próximo evento:', error);
+    }
+  }, []);
+
+  const carregarAvisos = useCallback(async () => {
+    try {
+      const resultado = await getAvisos();
+
+      const dados = resultado.data ?? [];
+
+      dados.sort((a: any, b: any) => {
+        if (a.importante === b.importante) return 0;
+        return a.importante ? -1 : 1;
+      });
+
+      setAvisos(dados);
+    } catch (error) {
+      console.error('Erro ao carregar os avisos:', error);
+    }
+  }, []);
+
+  const carregarTudo = useCallback(async () => {
     await Promise.all([
       carregarUltimoVideo(),
       carregarProximoEvento(),
       carregarAvisos(),
     ]);
-  }
+  }, [carregarAvisos, carregarProximoEvento, carregarUltimoVideo]);
 
-  async function atualizar() {
+  useFocusEffect(
+    useCallback(() => {
+      void carregarTudo();
+    }, [carregarTudo]),
+  );
+
+  const atualizar = useCallback(async () => {
     setRefreshing(true);
 
     try {
       await carregarTudo();
-       } finally {
+    } finally {
       setRefreshing(false);
     }
-  }
+  }, [carregarTudo]);
 
-async function carregarUltimoVideo() {
-  try {
-    const resultado = await getVideos();
-
-    setUltimoVideo(resultado.data[0] ?? null);
-  } catch (error) {
-    console.error('Erro ao carregar o último vídeo:', error);
-  }
-}
-
-async function carregarProximoEvento() {
-  try {
-    const resultado = await getEventos();
-
-    setProximoEvento(resultado.data[0] ?? null);
-  } catch (error) {
-    console.error('Erro ao carregar o próximo evento:', error);
-  }
-}
-
-async function carregarAvisos() {
-  try {
-    const resultado = await getAvisos();
-
-    const dados = resultado.data ?? [];
-
-    dados.sort((a: any, b: any) => {
-      if (a.importante === b.importante) return 0;
-      return a.importante ? -1 : 1;
-    });
-
-    setAvisos(dados);
-  } catch (error) {
-    console.error('Erro ao carregar os avisos:', error);
-  }
-}
   function formatarDataEvento(evento: any) {
     const dataTexto =
       evento?.start?.dateTime || evento?.start?.date;
@@ -113,6 +117,8 @@ async function carregarAvisos() {
 <Header />
 
 <VersiculoCard />
+
+<BoletimCard />
 
 <EventoCard
   evento={proximoEvento}

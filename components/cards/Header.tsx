@@ -1,45 +1,58 @@
-import { Image, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useCurrentUserProfile } from '../../hooks/useCurrentUserProfile';
 
 export default function Header() {
+  const insets = useSafeAreaInsets();
+  const { user } = useCurrentUserProfile();
+  const firstName = user?.nome?.trim().split(/\s+/)[0];
+
   return (
     <View
       style={{
+        flexDirection: 'row',
         alignItems: 'center',
-        paddingTop: 90,
-        paddingBottom: 20,
+        justifyContent: 'space-between',
+        paddingTop: insets.top + 12,
+        paddingBottom: 18,
         paddingHorizontal: 20,
       }}
     >
-<Image
-  source={require('../../assets/images/1.png')}
-  style={{
-    width: 55,
-    height: 55,
-    borderRadius: 10,
-    marginBottom: 8,
-  }}
-/>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: '#546B5F', fontSize: 13 }}>
+          Que bom ter você aqui
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={{
+            color: '#023411',
+            fontSize: 22,
+            fontWeight: '800',
+            marginTop: 2,
+          }}
+        >
+          Olá{firstName ? `, ${firstName}` : ''}!
+        </Text>
+      </View>
 
-      <Text
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Abrir avisos"
+        onPress={() => router.push('/avisos')}
         style={{
-          fontSize: 18,
-          fontWeight: '700',
-          color: '#023411',
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: '#FFFFFF',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        IP Providência
-      </Text>
-
-      <Text
-        style={{
-          fontSize: 11,
-          color: '#7A7A7A',
-          marginTop: 4,
-          textAlign: 'center',
-        }}
-      >
-        Deus guia. Deus sustenta. Deus provê.
-      </Text>
+        <Ionicons name="notifications-outline" size={22} color="#023411" />
+      </Pressable>
     </View>
   );
 }

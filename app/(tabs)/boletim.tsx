@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 import OfflineBanner from '../../components/ui/OfflineBanner';
+import AppHeader from '../../components/ui/AppHeader';
 
 import { getLinks } from '../../services/config';
 
@@ -63,8 +64,9 @@ export default function BoletimScreen() {
   return (
     <SafeAreaView
       style={styles.container}
-      edges={['top', 'left', 'right', 'bottom']}
+      edges={['left', 'right', 'bottom']}
     >
+      <AppHeader title="Boletim / Devocional" />
       <OfflineBanner visible={offline} />
 
       {erroCarregamento ? (

@@ -30,11 +30,21 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="boletim"
+        name="mais"
         options={{
-          title: 'Boletim',
+          title: 'Comunhão',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="document-text" size={size} color={String(color)} />
+            <Ionicons name="people" size={size} color={String(color)} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="agendaTab"
+        options={{
+          title: 'Agenda',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar" size={size} color={String(color)} />
           ),
         }}
       />
@@ -44,31 +54,7 @@ export default function TabLayout() {
         options={{
           title: 'Sermões',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="mic" size={size} color={String(color)} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="eventos"
-        options={{
-          title: 'Eventos',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons
-              name="calendar"
-              size={size}
-              color={String(color)}
-            />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="mais"
-        options={{
-          title: 'Mais',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="menu" size={size} color={String(color)} />
+            <Ionicons name="play-circle" size={size} color={String(color)} />
           ),
         }}
       />
@@ -76,8 +62,27 @@ export default function TabLayout() {
       <Tabs.Screen
         name="perfil"
         options={{
+          title: 'Perfil',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-circle" size={size} color={String(color)} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="boletim"
+        options={{
           href: null,
-          title: 'Meu Perfil',
+          title: 'Boletim',
+          tabBarStyle: { display: 'none' },
+        }}
+      />
+
+      <Tabs.Screen
+        name="eventos"
+        options={{
+          href: null,
+          title: 'Eventos',
         }}
       />
 

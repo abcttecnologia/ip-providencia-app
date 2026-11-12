@@ -363,7 +363,7 @@ export default function PerfilScreen() {
   if (!user) {
     return (
       <Screen>
-        <AppHeader title="Meu Perfil" />
+        <AppHeader title="Meu Perfil" showBack={false} />
         <EmptyState
           icon="person-outline"
           title={profileError ? "Perfil indisponível" : "Entre na sua conta"}
@@ -407,7 +407,7 @@ export default function PerfilScreen() {
   return (
     <>
       <Screen>
-        <AppHeader title="Meu Perfil" />
+        <AppHeader title="Meu Perfil" showBack={false} />
         <RefreshableScroll
           contentContainerStyle={styles.content}
           refreshing={false}
