@@ -6,6 +6,7 @@ export type RecordTarget = "pessoa" | "familia";
 export type HistoryKind = "admissao" | "batismo" | "transferencia" | "observacao";
 export type VisitStatus = "agendada" | "realizada" | "cancelada";
 export type FollowUpStatus = "aberto" | "em_andamento" | "concluido";
+export type PrayerRequestStatus = "aberto" | "respondido" | "arquivado";
 
 export interface Person {
   uid: string;
@@ -82,11 +83,23 @@ export interface DeletionRequest {
   anonimizacaoPastoralOk: boolean;
 }
 
+export interface PrayerRequest {
+  id: string;
+  autorUid: string | null;
+  titulo: string;
+  texto: string;
+  compartilhadoComPg: boolean;
+  pequenoGrupoId: string | null;
+  status: PrayerRequestStatus;
+  criadoEm?: Timestamp;
+}
+
 export interface PortalData {
   pessoas: Person[];
   familias: Family[];
   historico: MemberHistory[];
   visitas: PastoralVisit[];
   acompanhamentos: FollowUp[];
+  pedidosOracao: PrayerRequest[];
   solicitacoesExclusao: DeletionRequest[];
 }

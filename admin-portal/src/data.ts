@@ -24,6 +24,8 @@ import type {
   PastoralVisit,
   Person,
   PortalData,
+  PrayerRequest,
+  PrayerRequestStatus,
   UserFunction,
   UserProfile,
 } from "./types";
@@ -72,11 +74,16 @@ function mapCollection<T extends { id?: string; uid?: string }>(
   collectionName: string,
   key: "id" | "uid",
 ) {
-  return getDocs(collection(db, collectionName)).then((snapshot) =>
-    snapshot.docs.map(
-      (item) => ({ ...item.data(), [key]: item.id }) as T,
-    ),
-  );
+  return getDocs(collection(db, collectionName))
+    .then((snapshot) =>
+      snapshot.docs.map(
+        (item) => ({ ...item.data(), [key]: item.id }) as T,
+      ),
+    )
+    .catch((error: unknown) => {
+      console.error(`Falha ao carregar a coleção ${collectionName}:`, error);
+      throw error;
+    });
 }
 
 export async function loadPortalData(
@@ -88,6 +95,7 @@ export async function loadPortalData(
     historyRecords,
     visitRecords,
     followUpRecords,
+    prayerRequestRecords,
     deletionRequestSnapshot,
   ] = await Promise.all([
     mapCollection<Person>("users", "uid"),
@@ -97,13 +105,19 @@ export async function loadPortalData(
     options.pastoral
       ? mapCollection<FollowUp>("acompanhamentos", "id")
       : Promise.resolve([] as FollowUp[]),
+    options.pastoral
+      ? mapCollection<PrayerRequest>("pedidosOracao", "id")
+      : Promise.resolve([] as PrayerRequest[]),
     options.exclusionRequests
       ? getDocs(
           query(
             collection(db, "solicitacoesExclusao"),
             where("status", "==", "pendente"),
           ),
-        )
+        ).catch((error: unknown) => {
+          console.error("Falha ao carregar solicitações de exclusão:", error);
+          throw error;
+        })
       : Promise.resolve(null),
   ]);
   const historico = historyRecords.map((record) => ({
@@ -118,6 +132,10 @@ export async function loadPortalData(
     ...record,
     proximoRetorno: dateKey(record.proximoRetorno),
   }));
+  const pedidosOracao = prayerRequestRecords.sort(
+    (left, right) =>
+      (right.criadoEm?.toMillis() ?? 0) - (left.criadoEm?.toMillis() ?? 0),
+  );
   const solicitacoesExclusao: DeletionRequest[] =
     deletionRequestSnapshot?.docs
       .map((record) => ({
@@ -150,8 +168,31 @@ export async function loadPortalData(
     historico,
     visitas,
     acompanhamentos,
+    pedidosOracao,
     solicitacoesExclusao,
   };
+}
+
+export async function updatePrayerRequestStatus(
+  requestId: string,
+  status: PrayerRequestStatus,
+  actor: PortalActor,
+) {
+  if (!actor.funcoes?.includes("PASTORAL")) {
+    throw new Error("Somente a função Pastoral pode atualizar pedidos.");
+  }
+
+  const requestRef = doc(db, "pedidosOracao", requestId);
+  const batch = writeBatch(db);
+  batch.update(requestRef, {
+    status,
+    atualizadoEm: serverTimestamp(),
+  });
+  batch.set(
+    doc(collection(db, "auditoria")),
+    auditRecord("editar", "pedidosOracao", requestId, actor),
+  );
+  await batch.commit();
 }
 
 export async function updatePerson(

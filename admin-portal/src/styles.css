@@ -271,6 +271,18 @@ tbody tr:hover { background: #fcfdfc; }
 .kind-transferencia { color: #765a96; background: #f1ebf7; }
 .kind-observacao { color: #9a703c; background: #fbf2e7; }
 
+.tab-count { display: inline-grid; min-width: 16px; height: 16px; place-items: center; margin-left: 3px; padding: 0 4px; color: #718078; border-radius: 10px; background: #edf2ee; font-size: 8px; }
+.prayer-request-list { display: grid; }
+.prayer-request-card { display: grid; gap: 10px; padding: 16px 18px; border-top: 1px solid #eff2ef; }
+.prayer-request-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.prayer-request-heading h3 { margin: 0; color: #34463d; font-family: Manrope, sans-serif; font-size: 13px; font-weight: 800; }
+.prayer-request-author { display: block; margin-top: 4px; color: #8a9b91; font-size: 9px; }
+.prayer-request-text { margin: 0; color: #64736a; font-size: 10px; line-height: 1.6; white-space: pre-wrap; }
+.prayer-request-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; color: #8a9b91; font-size: 8px; }
+.prayer-request-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.status-respondido { color: #3c7955; background: #eaf4ed; }
+.status-arquivado { color: #8c9390; background: #eff1ef; }
+
 .report-stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .report-stat { display: flex; min-height: 105px; flex-direction: column; justify-content: space-between; padding: 16px; border: 1px solid #e9ede9; border-radius: 10px; background: #fff; box-shadow: var(--shadow); }
 .report-stat span { color: #79867f; font-size: 10px; }

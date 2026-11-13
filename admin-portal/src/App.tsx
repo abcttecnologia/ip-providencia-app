@@ -19,6 +19,7 @@ import {
   LoaderCircle,
   LogOut,
   Menu,
+  MessageCircle,
   Plus,
   Search,
   ShieldCheck,
@@ -40,6 +41,7 @@ import {
   saveFollowUp,
   saveVisit,
   signOutPortal,
+  updatePrayerRequestStatus,
   updatePerson,
 } from "./data";
 import type { PortalActor } from "./data";
@@ -54,6 +56,8 @@ import type {
   PastoralVisit,
   Person,
   PortalData,
+  PrayerRequest,
+  PrayerRequestStatus,
   RecordTarget,
   UserFunction,
   VisitStatus,
@@ -65,6 +69,7 @@ type PageKey =
   | "familias"
   | "visitas"
   | "acompanhamentos"
+  | "pedidosOracao"
   | "historico"
   | "relatorios"
   | "solicitacoes"
@@ -83,6 +88,7 @@ const navigation: { key: PageKey; label: string; icon: typeof LayoutDashboard }[
   { key: "familias", label: "Famílias", icon: House },
   { key: "visitas", label: "Visitas", icon: Home },
   { key: "acompanhamentos", label: "Acompanhamentos", icon: HeartHandshake },
+  { key: "pedidosOracao", label: "Pedidos de oração", icon: MessageCircle },
   { key: "historico", label: "Histórico", icon: FileClock },
   { key: "relatorios", label: "Relatórios", icon: ClipboardList },
   { key: "solicitacoes", label: "Solicitações de exclusão", icon: Trash2 },
@@ -95,6 +101,7 @@ const pageTitles: Record<PageKey, { title: string; eyebrow: string }> = {
   familias: { title: "Famílias", eyebrow: "NÚCLEOS FAMILIARES" },
   visitas: { title: "Visitas", eyebrow: "REGISTRO E AGENDA" },
   acompanhamentos: { title: "Acompanhamentos", eyebrow: "CUIDADO PASTORAL" },
+  pedidosOracao: { title: "Pedidos de oração", eyebrow: "CUIDADO PASTORAL" },
   historico: { title: "Histórico", eyebrow: "REGISTROS DA IGREJA" },
   relatorios: { title: "Relatórios", eyebrow: "MONITORAMENTO" },
   solicitacoes: { title: "Solicitações de exclusão", eyebrow: "PRIVACIDADE E LGPD" },
@@ -102,11 +109,11 @@ const pageTitles: Record<PageKey, { title: string; eyebrow: string }> = {
 };
 
 function isAdmin(profile: Person) {
-  return profile.perfil === "ADMINISTRADOR" && profile.ativo;
+  return profile.perfil === "ADMINISTRADOR" && profile.ativo === true;
 }
 
 function hasFunction(profile: Person, functionName: UserFunction) {
-  return profile.ativo && profile.funcoes?.includes(functionName) === true;
+  return profile.ativo === true && profile.funcoes?.includes(functionName) === true;
 }
 
 function isPastoral(profile: Person) {
@@ -435,6 +442,7 @@ function AdminPortal({
               historico: [],
               visitas: [],
               acompanhamentos: [],
+              pedidosOracao: [],
               solicitacoesExclusao: [],
             };
         setData(result);
@@ -444,7 +452,12 @@ function AdminPortal({
         if (currentProfile) onProfileUpdate(currentProfile);
         setError("");
       } catch (loadError) {
-        console.error("Falha ao carregar os dados do portal:", loadError);
+        console.error("Falha ao carregar os dados do portal:", {
+          perfil: profile.perfil,
+          ativo: profile.ativo,
+          funcoes: profile.funcoes,
+          error: loadError,
+        });
         setError("Não foi possível carregar os dados. Confira a conexão e as regras do Firestore.");
       } finally {
         setLoading(false);
@@ -461,7 +474,7 @@ function AdminPortal({
   const title = pageTitles[page];
   const visibleNavigation = navigation.filter(({ key }) => {
     if (key === "tesouraria") return hasFunction(profile, "TESOURARIA");
-    if (key === "acompanhamentos") return canViewPastoral;
+    if (key === "acompanhamentos" || key === "pedidosOracao") return canViewPastoral;
     if (key === "solicitacoes") return canReadDeletionRequests;
     return canCare;
   });
@@ -478,10 +491,11 @@ function AdminPortal({
   useEffect(() => {
     const pageIsAllowed =
       (page === "tesouraria" && hasFunction(profile, "TESOURARIA")) ||
-      (page === "acompanhamentos" && canViewPastoral) ||
+      ((page === "acompanhamentos" || page === "pedidosOracao") && canViewPastoral) ||
       (page === "solicitacoes" && canReadDeletionRequests) ||
       (page !== "tesouraria" &&
         page !== "acompanhamentos" &&
+        page !== "pedidosOracao" &&
         page !== "solicitacoes" &&
         canCare);
     if (!pageIsAllowed) {
@@ -557,6 +571,9 @@ function AdminPortal({
               {key === "acompanhamentos" && data?.acompanhamentos.filter((item) => item.status !== "concluido").length ? (
                 <span className="nav-count">{data.acompanhamentos.filter((item) => item.status !== "concluido").length}</span>
               ) : null}
+              {key === "pedidosOracao" && data?.pedidosOracao.filter((item) => item.status === "aberto").length ? (
+                <span className="nav-count">{data.pedidosOracao.filter((item) => item.status === "aberto").length}</span>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -581,10 +598,10 @@ function AdminPortal({
             {canCare ? <label className="global-search">
               <Search size={16} />
               <input
-                placeholder="Buscar pessoas, famílias..."
+                placeholder={page === "pedidosOracao" ? "Buscar pedidos de oração..." : "Buscar pessoas, famílias..."}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                aria-label="Buscar pessoas e famílias"
+                aria-label={page === "pedidosOracao" ? "Buscar pedidos de oração" : "Buscar pessoas e famílias"}
               />
               <kbd>⌘ K</kbd>
             </label> : null}
@@ -639,6 +656,28 @@ function AdminPortal({
               data={data}
               search={query}
               onEdit={(followup) => setModal({ kind: "followup", followup })}
+            />
+          ) : null}
+          {page === "pedidosOracao" ? (
+            <PrayerRequestsPage
+              requests={data.pedidosOracao}
+              people={data.pessoas}
+              search={query}
+              onStatusChange={(request, status) =>
+                runActionSafely(
+                  () =>
+                    updatePrayerRequestStatus(
+                      request.id,
+                      status,
+                      portalActor(profile),
+                    ),
+                  status === "respondido"
+                    ? "Pedido marcado como respondido."
+                    : status === "arquivado"
+                      ? "Pedido arquivado."
+                      : "Pedido reaberto.",
+                )
+              }
             />
           ) : null}
           {page === "historico" ? <HistoryPage data={data} search={query} onEdit={(history) => setModal({ kind: "history", history })} /> : null}
@@ -766,6 +805,7 @@ function pageDescription(page: PageKey) {
     familias: "Organize os núcleos familiares e seus vínculos.",
     visitas: "Agende visitas e registre o que foi realizado.",
     acompanhamentos: "Acompanhe necessidades, retornos e encaminhamentos.",
+    pedidosOracao: "Acompanhe e atualize o status dos pedidos da comunidade.",
     historico: "Consulte registros importantes da caminhada de cada pessoa.",
     relatorios: "Indicadores de cuidado e pendências da comunidade.",
     solicitacoes: "Anonimize os registros após solicitação do titular.",
@@ -791,6 +831,14 @@ function DashboardPage({
   const openFollowUps = canViewPastoral
     ? data.acompanhamentos.filter((item) => item.status !== "concluido")
     : [];
+  const openPrayerRequests = canViewPastoral
+    ? data.pedidosOracao.filter((request) => request.status === "aberto")
+    : [];
+  const overduePrayerRequests = openPrayerRequests.filter(
+    (request) =>
+      request.criadoEm !== undefined &&
+      Date.now() - request.criadoEm.toMillis() > 7 * 24 * 60 * 60 * 1000,
+  );
   const visitorCount = data.pessoas.filter((person) => person.perfil === "VISITANTE" && person.ativo).length;
   const newVisitors = data.pessoas.filter((person) => {
     if (!person.ativo || person.perfil !== "VISITANTE" || !person.criadoEm) return false;
@@ -853,6 +901,7 @@ function DashboardPage({
         <MetricCard icon={<UserPlus size={19} />} label="Novos visitantes" value={newVisitors} tone="purple" footnote="neste mês" />
         <MetricCard icon={<Home size={19} />} label="Visitas este mês" value={visitsThisMonth} tone="orange" footnote="visitas registradas" />
         {canViewPastoral ? <MetricCard icon={<AlertTriangle size={19} />} label="Acompanhamentos" value={openFollowUps.length} tone="red" footnote="em aberto" /> : null}
+        {canViewPastoral ? <MetricCard icon={<MessageCircle size={19} />} label="Pedidos de oração" value={openPrayerRequests.length} tone="blue" footnote="em acompanhamento" /> : null}
       </section>
 
       <section className="dashboard-grid">
@@ -899,19 +948,29 @@ function DashboardPage({
 
         <Panel title="Alertas e pendências" subtitle="Ações que merecem atenção" icon={<AlertTriangle size={17} />}>
           <div className="alert-list">
-            {canViewPastoral && overdueFollowUps.length ? (
-              overdueFollowUps.slice(0, 3).map((item) => (
-                <div className="alert-row" key={item.id}>
-                  <span className="alert-dot alert-dot-red"><AlertTriangle size={13} /></span>
-                  <span><strong>Retorno pendente</strong><small>{item.alvoNome} · previsto para {formatDate(item.proximoRetorno)}</small></span>
-                  <ArrowRight size={15} />
-                </div>
-              ))
-            ) : canViewPastoral ? (
-              <div className="alert-row">
-                <span className="alert-dot alert-dot-green"><Check size={13} /></span>
-                <span><strong>Tudo em dia</strong><small>Não há retornos vencidos no momento.</small></span>
-              </div>
+            {canViewPastoral ? (
+              <>
+                {overdueFollowUps.slice(0, 3).map((item) => (
+                  <div className="alert-row" key={item.id}>
+                    <span className="alert-dot alert-dot-red"><AlertTriangle size={13} /></span>
+                    <span><strong>Retorno pendente</strong><small>{item.alvoNome} · previsto para {formatDate(item.proximoRetorno)}</small></span>
+                    <ArrowRight size={15} />
+                  </div>
+                ))}
+                {overduePrayerRequests.length ? (
+                  <div className="alert-row">
+                    <span className="alert-dot alert-dot-red"><MessageCircle size={13} /></span>
+                    <span><strong>Pedidos de oração sem retorno</strong><small>{overduePrayerRequests.length} pedido(s) em aberto há mais de 7 dias.</small></span>
+                    <button className="text-button" onClick={() => onNavigate("pedidosOracao")}>Ver</button>
+                  </div>
+                ) : null}
+                {!overdueFollowUps.length && !overduePrayerRequests.length ? (
+                  <div className="alert-row">
+                    <span className="alert-dot alert-dot-green"><Check size={13} /></span>
+                    <span><strong>Tudo em dia</strong><small>Não há retornos vencidos nem pedidos antigos.</small></span>
+                  </div>
+                ) : null}
+              </>
             ) : <div className="alert-row"><span><strong>Acesso restrito</strong><small>Os acompanhamentos são visíveis somente à função Pastoral.</small></span></div>}
             {visitorCount ? (
               <div className="alert-row">
@@ -1203,6 +1262,139 @@ function FollowUpsPage({
   );
 }
 
+function PrayerRequestsPage({
+  requests,
+  people,
+  search,
+  onStatusChange,
+}: {
+  requests: PrayerRequest[];
+  people: Person[];
+  search: string;
+  onStatusChange: (request: PrayerRequest, status: PrayerRequestStatus) => void;
+}) {
+  const [filter, setFilter] = useState<PrayerRequestStatus>("aberto");
+  const filtered = requests.filter((request) =>
+    request.status === filter &&
+    `${request.titulo} ${request.texto}`
+      .toLocaleLowerCase("pt-BR")
+      .includes(search.toLocaleLowerCase("pt-BR")),
+  );
+  const tabs: { status: PrayerRequestStatus; label: string }[] = [
+    { status: "aberto", label: "Em acompanhamento" },
+    { status: "respondido", label: "Respondidos" },
+    { status: "arquivado", label: "Arquivados" },
+  ];
+
+  return (
+    <section className="panel table-panel">
+      <div className="table-toolbar">
+        <div>
+          <h2>Pedidos recebidos</h2>
+          <p>{filtered.length} pedido(s) nesta aba</p>
+        </div>
+        <div className="filter-tabs">
+          {tabs.map(({ status, label }) => (
+            <button
+              key={status}
+              className={filter === status ? "filter-active" : ""}
+              onClick={() => setFilter(status)}
+            >
+              {label} <span className="tab-count">{requests.filter((request) => request.status === status).length}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="prayer-request-list">
+        {filtered.map((request) => (
+          <article className="prayer-request-card" key={request.id}>
+            <header className="prayer-request-heading">
+              <div>
+                <h3>{request.titulo}</h3>
+                <span className="prayer-request-author">
+                  {request.autorUid === null
+                    ? "Visitante sem conta"
+                    : people.find((person) => person.uid === request.autorUid)?.nome ??
+                      "Autor não localizado"}
+                </span>
+              </div>
+              <StatusBadge status={request.status} />
+            </header>
+            <p className="prayer-request-text">{request.texto}</p>
+            <div className="prayer-request-meta">
+              <span>{formatPrayerRequestDate(request.criadoEm)}</span>
+              <span>
+                {request.compartilhadoComPg
+                  ? "Compartilhado com o PG"
+                  : "Não compartilhado com o PG"}
+              </span>
+            </div>
+            <div className="prayer-request-actions">
+              {request.status === "aberto" ? (
+                <>
+                  <button
+                    className="button button-small button-primary"
+                    onClick={() => onStatusChange(request, "respondido")}
+                  >
+                    Marcar como respondido
+                  </button>
+                  <button
+                    className="button button-small"
+                    onClick={() => onStatusChange(request, "arquivado")}
+                  >
+                    Arquivar
+                  </button>
+                </>
+              ) : null}
+              {request.status === "respondido" ? (
+                <>
+                  <button
+                    className="button button-small"
+                    onClick={() => onStatusChange(request, "aberto")}
+                  >
+                    Reabrir
+                  </button>
+                  <button
+                    className="button button-small"
+                    onClick={() => onStatusChange(request, "arquivado")}
+                  >
+                    Arquivar
+                  </button>
+                </>
+              ) : null}
+              {request.status === "arquivado" ? (
+                <button
+                  className="button button-small"
+                  onClick={() => onStatusChange(request, "aberto")}
+                >
+                  Reabrir
+                </button>
+              ) : null}
+            </div>
+          </article>
+        ))}
+        {!filtered.length ? (
+          <EmptyState
+            icon={<MessageCircle size={22} />}
+            text={requests.some((request) => request.status === filter)
+              ? "Nenhum pedido corresponde ao filtro de texto."
+              : "Nenhum pedido nesta aba."}
+          />
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function formatPrayerRequestDate(value: PrayerRequest["criadoEm"]) {
+  if (!value) return "Data indisponível";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(value.toDate());
+}
+
 function HistoryPage({
   data,
   search,
@@ -1342,6 +1534,8 @@ function StatusBadge({ status }: { status: string }) {
     realizada: "Realizada",
     cancelada: "Cancelada",
     aberto: "Em aberto",
+    respondido: "Respondido",
+    arquivado: "Arquivado",
     pendente: "Pendente",
     em_andamento: "Em andamento",
     concluido: "Concluído",
