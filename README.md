@@ -40,12 +40,30 @@ O aplicativo oferece uma experiência simples, rápida e intuitiva, permitindo q
 # Tecnologias
 
 - React Native
-- Expo SDK 54
+- Expo SDK 58
 - Expo Router
 - TypeScript
 - Firebase
+- Firebase Cloud Functions
 - React Navigation
 - Expo Notifications
+
+## Pequenos Grupos
+
+Membros solicitam participação pelo app. Líderes aprovam solicitações, consultam
+participantes e pedidos de oração compartilhados e registram presença. A
+administração e a secretaria vinculam líderes no portal; a secretaria também
+pode aprovar solicitações. A lista do app usa documentos mínimos de nome e foto,
+sem dar acesso aos demais dados cadastrais.
+
+As notificações push e a sincronização da lista de participantes dependem das
+Cloud Functions em `functions/`. O projeto Firebase precisa estar selecionado
+na CLI e habilitado para Functions antes da implantação:
+
+```bash
+firebase deploy --only functions
+firebase deploy --only firestore:rules
+```
 
 ---
 

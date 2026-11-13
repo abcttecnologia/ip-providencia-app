@@ -99,10 +99,18 @@ export async function prepareAccountDeletion() {
       ),
     ),
   ]);
+  const prayerResponses = await Promise.all(
+    prayers.docs.map((prayer) =>
+      getDoc(doc(db, 'pedidosOracao', prayer.id, 'respostas', 'pastoral')),
+    ),
+  );
 
   const references = [
     ...notes.docs.map((item) => item.ref),
     ...tokens.docs.map((item) => item.ref),
+    ...prayerResponses
+      .filter((response) => response.exists())
+      .map((response) => response.ref),
     ...prayers.docs.map((item) => item.ref),
   ];
 

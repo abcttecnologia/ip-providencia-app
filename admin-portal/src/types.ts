@@ -92,6 +92,45 @@ export interface PrayerRequest {
   pequenoGrupoId: string | null;
   status: PrayerRequestStatus;
   criadoEm?: Timestamp;
+  respostaPastoral?: string;
+  respondidoPorNome?: string;
+  respondidoEm?: Timestamp;
+}
+
+export interface SmallGroup {
+  id: string;
+  nome: string;
+  descricao?: string;
+  bairro?: string;
+  diaSemana?: string;
+  horario?: string;
+  local?: string;
+  lideres?: string;
+  liderUids?: string[];
+  ativo: boolean;
+}
+
+export interface PgRequest {
+  id: string;
+  uid: string;
+  nome: string;
+  grupoId: string;
+  status: "pendente" | "aprovada" | "recusada";
+  criadoEm?: Timestamp;
+}
+
+export interface PgAttendance {
+  id: string;
+  grupoId: string;
+  data: string;
+  presentes: string[];
+  visitantes: number;
+}
+
+export interface PgParticipant {
+  uid: string;
+  grupoId: string;
+  ingressoEm?: Timestamp;
 }
 
 export interface PortalData {
@@ -101,5 +140,9 @@ export interface PortalData {
   visitas: PastoralVisit[];
   acompanhamentos: FollowUp[];
   pedidosOracao: PrayerRequest[];
+  pequenosGrupos: SmallGroup[];
+  solicitacoesPg: PgRequest[];
+  presencasPg: PgAttendance[];
+  participantesPg: PgParticipant[];
   solicitacoesExclusao: DeletionRequest[];
 }

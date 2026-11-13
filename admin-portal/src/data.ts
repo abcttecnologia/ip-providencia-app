@@ -23,9 +23,13 @@ import type {
   MemberHistory,
   PastoralVisit,
   Person,
+  PgAttendance,
+  PgParticipant,
+  PgRequest,
   PortalData,
   PrayerRequest,
   PrayerRequestStatus,
+  SmallGroup,
   UserFunction,
   UserProfile,
 } from "./types";
@@ -96,6 +100,9 @@ export async function loadPortalData(
     visitRecords,
     followUpRecords,
     prayerRequestRecords,
+    smallGroupRecords,
+    pgRequestRecords,
+    attendanceRecords,
     deletionRequestSnapshot,
   ] = await Promise.all([
     mapCollection<Person>("users", "uid"),
@@ -108,6 +115,9 @@ export async function loadPortalData(
     options.pastoral
       ? mapCollection<PrayerRequest>("pedidosOracao", "id")
       : Promise.resolve([] as PrayerRequest[]),
+    mapCollection<SmallGroup>("pequenosGrupos", "id"),
+    mapCollection<PgRequest>("solicitacoesPg", "id"),
+    mapCollection<PgAttendance>("presencasPg", "id"),
     options.exclusionRequests
       ? getDocs(
           query(
@@ -132,10 +142,64 @@ export async function loadPortalData(
     ...record,
     proximoRetorno: dateKey(record.proximoRetorno),
   }));
-  const pedidosOracao = prayerRequestRecords.sort(
+  const pedidosOracao = await Promise.all(
+    prayerRequestRecords
+      .sort(
+        (left, right) =>
+          (right.criadoEm?.toMillis() ?? 0) -
+          (left.criadoEm?.toMillis() ?? 0),
+      )
+      .map(async (request) => {
+        const responseSnapshot = await getDoc(
+          doc(db, "pedidosOracao", request.id, "respostas", "pastoral"),
+        );
+        if (!responseSnapshot.exists()) return request;
+
+        const response = responseSnapshot.data();
+        if (typeof response.texto !== "string") {
+          throw new Error(
+            `A resposta pastoral do pedido ${request.id} é inválida.`,
+          );
+        }
+
+        return {
+          ...request,
+          respostaPastoral: response.texto,
+          respondidoPorNome:
+            typeof response.porNome === "string"
+              ? response.porNome
+              : undefined,
+          respondidoEm: response.em,
+        };
+      }),
+  );
+  const pequenosGrupos = smallGroupRecords.sort((left, right) =>
+    left.nome.localeCompare(right.nome),
+  );
+  const solicitacoesPg = pgRequestRecords.sort(
     (left, right) =>
       (right.criadoEm?.toMillis() ?? 0) - (left.criadoEm?.toMillis() ?? 0),
   );
+  const presencasPg = attendanceRecords.sort((left, right) =>
+    right.data.localeCompare(left.data),
+  );
+  const participantesPg = (
+    await Promise.all(
+      smallGroupRecords.map(async (group) => {
+        const snapshot = await getDocs(
+          collection(db, "pequenosGrupos", group.id, "participantesMeta"),
+        );
+        return snapshot.docs.map(
+          (participant) =>
+            ({
+              ...participant.data(),
+              uid: participant.id,
+              grupoId: group.id,
+            }) as PgParticipant,
+        );
+      }),
+    )
+  ).flat();
   const solicitacoesExclusao: DeletionRequest[] =
     deletionRequestSnapshot?.docs
       .map((record) => ({
@@ -169,8 +233,113 @@ export async function loadPortalData(
     visitas,
     acompanhamentos,
     pedidosOracao,
+    pequenosGrupos,
+    solicitacoesPg,
+    presencasPg,
+    participantesPg,
     solicitacoesExclusao,
   };
+}
+
+export async function saveSmallGroupLeaders(
+  groupId: string,
+  leaderUids: string[],
+  actor: PortalActor,
+) {
+  if (
+    actor.perfil !== "ADMINISTRADOR" &&
+    !actor.funcoes?.includes("SECRETARIA")
+  ) {
+    throw new Error("Somente a administração ou a secretaria pode vincular líderes.");
+  }
+  if (new Set(leaderUids).size !== leaderUids.length) {
+    throw new Error("Selecione líderes diferentes.");
+  }
+
+  const groupRef = doc(db, "pequenosGrupos", groupId);
+  const batch = writeBatch(db);
+  batch.update(groupRef, {
+    liderUids: leaderUids,
+    atualizadoEm: serverTimestamp(),
+  });
+  batch.set(
+    doc(collection(db, "auditoria")),
+    auditRecord("editar", "pequenosGrupos", groupId, actor),
+  );
+  await batch.commit();
+}
+
+export async function updatePgRequest(
+  request: PgRequest,
+  status: Extract<PgRequest["status"], "aprovada" | "recusada">,
+  actor: PortalActor,
+) {
+  if (
+    actor.perfil !== "ADMINISTRADOR" &&
+    !actor.funcoes?.includes("SECRETARIA")
+  ) {
+    throw new Error("Somente a administração ou a secretaria pode aprovar pedidos.");
+  }
+  if (request.status !== "pendente") {
+    throw new Error("Esta solicitação já foi atualizada.");
+  }
+
+  const requestRef = doc(db, "solicitacoesPg", request.id);
+  const requestAuditRef = doc(collection(db, "auditoria"));
+  const userRef = doc(db, "users", request.uid);
+  const userAuditRef = doc(collection(db, "auditoria"));
+  await runTransaction(db, async (transaction) => {
+    const requestSnapshot = await transaction.get(requestRef);
+    if (!requestSnapshot.exists()) {
+      throw new Error("A solicitação não existe mais.");
+    }
+    const currentRequest = requestSnapshot.data();
+    if (
+      currentRequest.status !== "pendente" ||
+      currentRequest.uid !== request.uid ||
+      currentRequest.grupoId !== request.grupoId
+    ) {
+      throw new Error("A solicitação já foi atualizada.");
+    }
+
+    let userSnapshot = null;
+    if (status === "aprovada") {
+      userSnapshot = await transaction.get(userRef);
+      if (!userSnapshot.exists()) {
+        throw new Error("O cadastro da pessoa não existe mais.");
+      }
+      const currentUser = userSnapshot.data();
+      if (
+        currentUser.ativo !== true ||
+        currentUser.perfil !== "MEMBRO" ||
+        (typeof currentUser.pequenoGrupoId === "string" &&
+          currentUser.pequenoGrupoId !== "")
+      ) {
+        throw new Error(
+          "A pessoa não está mais disponível para vinculação a este PG.",
+        );
+      }
+    }
+
+    transaction.update(requestRef, {
+      status,
+      atualizadoEm: serverTimestamp(),
+    });
+    transaction.set(
+      requestAuditRef,
+      auditRecord("editar", "solicitacoesPg", request.id, actor),
+    );
+    if (status === "aprovada") {
+      transaction.update(userRef, {
+        pequenoGrupoId: request.grupoId,
+        atualizadoEm: serverTimestamp(),
+      });
+      transaction.set(
+        userAuditRef,
+        auditRecord("editar", "users", request.uid, actor),
+      );
+    }
+  });
 }
 
 export async function updatePrayerRequestStatus(
@@ -187,6 +356,43 @@ export async function updatePrayerRequestStatus(
   batch.update(requestRef, {
     status,
     atualizadoEm: serverTimestamp(),
+  });
+  batch.set(
+    doc(collection(db, "auditoria")),
+    auditRecord("editar", "pedidosOracao", requestId, actor),
+  );
+  await batch.commit();
+}
+
+export async function respondToPrayerRequest(
+  requestId: string,
+  response: string,
+  actor: PortalActor,
+) {
+  if (!actor.funcoes?.includes("PASTORAL")) {
+    throw new Error("Somente a função Pastoral pode responder aos pedidos.");
+  }
+
+  const text = response.trim();
+  if (!text || text.length > 2000) {
+    throw new Error("A resposta deve ter entre 1 e 2000 caracteres.");
+  }
+  const responderName = actor.nome.trim();
+  if (!responderName || responderName.length > 120) {
+    throw new Error("O nome do perfil pastoral é inválido.");
+  }
+
+  const requestRef = doc(db, "pedidosOracao", requestId);
+  const batch = writeBatch(db);
+  batch.update(requestRef, {
+    status: "respondido",
+    atualizadoEm: serverTimestamp(),
+  });
+  batch.set(doc(requestRef, "respostas", "pastoral"), {
+    texto: text,
+    por: actor.uid,
+    porNome: responderName,
+    em: serverTimestamp(),
   });
   batch.set(
     doc(collection(db, "auditoria")),

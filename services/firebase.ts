@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getFunctions } from 'firebase/functions';
 
 import { requireEnv } from './env';
 
@@ -63,3 +64,4 @@ function initializeFirebaseAuth() {
 export const db = getFirestore(app);
 export const auth = initializeFirebaseAuth();
 export const storage = getStorage(app);
+export const functions = getFunctions(app);

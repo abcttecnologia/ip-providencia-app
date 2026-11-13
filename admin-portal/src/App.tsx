@@ -37,11 +37,14 @@ import {
   addMemberHistory,
   completeDeletionRequest,
   loadPortalData,
+  respondToPrayerRequest,
   saveFamily,
   saveFollowUp,
+  saveSmallGroupLeaders,
   saveVisit,
   signOutPortal,
   updatePrayerRequestStatus,
+  updatePgRequest,
   updatePerson,
 } from "./data";
 import type { PortalActor } from "./data";
@@ -58,7 +61,9 @@ import type {
   PortalData,
   PrayerRequest,
   PrayerRequestStatus,
+  PgRequest,
   RecordTarget,
+  SmallGroup,
   UserFunction,
   VisitStatus,
 } from "./types";
@@ -70,6 +75,8 @@ type PageKey =
   | "visitas"
   | "acompanhamentos"
   | "pedidosOracao"
+  | "pequenosGrupos"
+  | "solicitacoesPg"
   | "historico"
   | "relatorios"
   | "solicitacoes"
@@ -80,6 +87,7 @@ type ModalState =
   | { kind: "history"; history: MemberHistory | null }
   | { kind: "visit"; visit: PastoralVisit | null }
   | { kind: "followup"; followup: FollowUp | null }
+  | { kind: "leaders"; group: SmallGroup }
   | null;
 
 const navigation: { key: PageKey; label: string; icon: typeof LayoutDashboard }[] = [
@@ -89,6 +97,8 @@ const navigation: { key: PageKey; label: string; icon: typeof LayoutDashboard }[
   { key: "visitas", label: "Visitas", icon: Home },
   { key: "acompanhamentos", label: "Acompanhamentos", icon: HeartHandshake },
   { key: "pedidosOracao", label: "Pedidos de oração", icon: MessageCircle },
+  { key: "pequenosGrupos", label: "Pequenos Grupos", icon: Users },
+  { key: "solicitacoesPg", label: "Solicitações de PG", icon: UserPlus },
   { key: "historico", label: "Histórico", icon: FileClock },
   { key: "relatorios", label: "Relatórios", icon: ClipboardList },
   { key: "solicitacoes", label: "Solicitações de exclusão", icon: Trash2 },
@@ -102,6 +112,8 @@ const pageTitles: Record<PageKey, { title: string; eyebrow: string }> = {
   visitas: { title: "Visitas", eyebrow: "REGISTRO E AGENDA" },
   acompanhamentos: { title: "Acompanhamentos", eyebrow: "CUIDADO PASTORAL" },
   pedidosOracao: { title: "Pedidos de oração", eyebrow: "CUIDADO PASTORAL" },
+  pequenosGrupos: { title: "Pequenos Grupos", eyebrow: "COMUNHÃO E FREQUÊNCIA" },
+  solicitacoesPg: { title: "Solicitações de PG", eyebrow: "VÍNCULOS DE MEMBROS" },
   historico: { title: "Histórico", eyebrow: "REGISTROS DA IGREJA" },
   relatorios: { title: "Relatórios", eyebrow: "MONITORAMENTO" },
   solicitacoes: { title: "Solicitações de exclusão", eyebrow: "PRIVACIDADE E LGPD" },
@@ -194,6 +206,45 @@ function daysSinceDate(value: string) {
   const dateTime = Date.UTC(year, month - 1, day);
   const todayTime = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
   return Math.floor((todayTime - dateTime) / 86_400_000);
+}
+
+function pgAbsenceAlerts(data: PortalData) {
+  const alerts: { group: SmallGroup; person: Person; streak: number }[] = [];
+  for (const group of data.pequenosGrupos) {
+    if (!group.ativo) continue;
+    const participants = data.participantesPg.filter(
+      (participant) => participant.grupoId === group.id,
+    );
+    for (const participant of participants) {
+      const person = data.pessoas.find(
+        (candidate) =>
+          candidate.uid === participant.uid &&
+          candidate.ativo &&
+          candidate.perfil === "MEMBRO",
+      );
+      if (!person) continue;
+      const joinedOn = participant.ingressoEm
+        ? participant.ingressoEm.toDate().toISOString().slice(0, 10)
+        : "";
+      const records = data.presencasPg
+        .filter(
+          (record) =>
+            record.grupoId === group.id &&
+            record.data <= todayInput() &&
+            (!joinedOn || record.data >= joinedOn),
+        )
+        .sort((left, right) => right.data.localeCompare(left.data));
+      if (records.length < 3) continue;
+
+      let streak = 0;
+      for (const record of records) {
+        if (record.presentes.includes(person.uid)) break;
+        streak += 1;
+      }
+      if (streak >= 3) alerts.push({ group, person, streak });
+    }
+  }
+  return alerts;
 }
 
 function App() {
@@ -415,6 +466,8 @@ function AdminPortal({
   const canViewPastoral = isPastoral(profile);
   const canReadDeletionRequests = isAdmin(profile) || canViewPastoral;
   const isAdministrator = isAdmin(profile);
+  const canManagePg =
+    isAdministrator || hasFunction(profile, "SECRETARIA");
   const [page, setPage] = useState<PageKey>(
     canCare ? "dashboard" : "tesouraria",
   );
@@ -443,6 +496,10 @@ function AdminPortal({
               visitas: [],
               acompanhamentos: [],
               pedidosOracao: [],
+              pequenosGrupos: [],
+              solicitacoesPg: [],
+              presencasPg: [],
+              participantesPg: [],
               solicitacoesExclusao: [],
             };
         setData(result);
@@ -475,6 +532,8 @@ function AdminPortal({
   const visibleNavigation = navigation.filter(({ key }) => {
     if (key === "tesouraria") return hasFunction(profile, "TESOURARIA");
     if (key === "acompanhamentos" || key === "pedidosOracao") return canViewPastoral;
+    if (key === "solicitacoesPg") return canManagePg;
+    if (key === "pequenosGrupos") return canCare;
     if (key === "solicitacoes") return canReadDeletionRequests;
     return canCare;
   });
@@ -492,16 +551,27 @@ function AdminPortal({
     const pageIsAllowed =
       (page === "tesouraria" && hasFunction(profile, "TESOURARIA")) ||
       ((page === "acompanhamentos" || page === "pedidosOracao") && canViewPastoral) ||
+      (page === "solicitacoesPg" && canManagePg) ||
+      (page === "pequenosGrupos" && canCare) ||
       (page === "solicitacoes" && canReadDeletionRequests) ||
       (page !== "tesouraria" &&
         page !== "acompanhamentos" &&
         page !== "pedidosOracao" &&
+        page !== "pequenosGrupos" &&
+        page !== "solicitacoesPg" &&
         page !== "solicitacoes" &&
         canCare);
     if (!pageIsAllowed) {
       setPage(canCare ? "dashboard" : "tesouraria");
     }
-  }, [page, profile, canCare, canReadDeletionRequests, canViewPastoral]);
+  }, [
+    page,
+    profile,
+    canCare,
+    canManagePg,
+    canReadDeletionRequests,
+    canViewPastoral,
+  ]);
 
   async function runAction(action: () => Promise<void>, successMessage: string) {
     await action();
@@ -514,8 +584,8 @@ function AdminPortal({
   function runActionSafely(
     action: () => Promise<void>,
     successMessage: string,
-  ) {
-    void runAction(action, successMessage).catch((actionError: unknown) => {
+  ): Promise<void> {
+    return runAction(action, successMessage).catch((actionError: unknown) => {
       console.error("Falha ao executar ação do portal:", actionError);
       setError(
         actionError instanceof Error
@@ -598,10 +668,26 @@ function AdminPortal({
             {canCare ? <label className="global-search">
               <Search size={16} />
               <input
-                placeholder={page === "pedidosOracao" ? "Buscar pedidos de oração..." : "Buscar pessoas, famílias..."}
+                placeholder={
+                  page === "pedidosOracao"
+                    ? "Buscar pedidos de oração..."
+                    : page === "pequenosGrupos"
+                      ? "Buscar Pequenos Grupos..."
+                      : page === "solicitacoesPg"
+                        ? "Buscar solicitações..."
+                        : "Buscar pessoas, famílias..."
+                }
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                aria-label={page === "pedidosOracao" ? "Buscar pedidos de oração" : "Buscar pessoas e famílias"}
+                aria-label={
+                  page === "pedidosOracao"
+                    ? "Buscar pedidos de oração"
+                    : page === "pequenosGrupos"
+                      ? "Buscar Pequenos Grupos"
+                      : page === "solicitacoesPg"
+                        ? "Buscar solicitações de PG"
+                        : "Buscar pessoas e famílias"
+                }
               />
               <kbd>⌘ K</kbd>
             </label> : null}
@@ -663,6 +749,17 @@ function AdminPortal({
               requests={data.pedidosOracao}
               people={data.pessoas}
               search={query}
+              onRespond={(request, response) =>
+                runAction(
+                  () =>
+                    respondToPrayerRequest(
+                      request.id,
+                      response,
+                      portalActor(profile),
+                    ),
+                  "Resposta enviada ao autor.",
+                )
+              }
               onStatusChange={(request, status) =>
                 runActionSafely(
                   () =>
@@ -676,6 +773,34 @@ function AdminPortal({
                     : status === "arquivado"
                       ? "Pedido arquivado."
                       : "Pedido reaberto.",
+                )
+              }
+            />
+          ) : null}
+          {page === "pequenosGrupos" ? (
+            <SmallGroupsPage
+              data={data}
+              search={query}
+              canManagePg={canManagePg}
+              onEditLeaders={(group) => setModal({ kind: "leaders", group })}
+            />
+          ) : null}
+          {page === "solicitacoesPg" ? (
+            <PgRequestsPage
+              requests={data.solicitacoesPg}
+              groups={data.pequenosGrupos}
+              search={query}
+              onUpdate={(request, status) =>
+                runActionSafely(
+                  () =>
+                    updatePgRequest(
+                      request,
+                      status,
+                      portalActor(profile),
+                    ),
+                  status === "aprovada"
+                    ? "Participante vinculado ao Pequeno Grupo."
+                    : "Solicitação recusada.",
                 )
               }
             />
@@ -792,6 +917,24 @@ function AdminPortal({
               }
             />
           ) : null}
+          {modal.kind === "leaders" ? (
+            <GroupLeadersForm
+              group={modal.group}
+              data={data}
+              onCancel={() => setModal(null)}
+              onSave={(leaderUids) =>
+                runAction(
+                  () =>
+                    saveSmallGroupLeaders(
+                      modal.group.id,
+                      leaderUids,
+                      portalActor(profile),
+                    ),
+                  "Líderes do Pequeno Grupo atualizados.",
+                )
+              }
+            />
+          ) : null}
         </Modal>
       ) : null}
     </div>
@@ -806,6 +949,8 @@ function pageDescription(page: PageKey) {
     visitas: "Agende visitas e registre o que foi realizado.",
     acompanhamentos: "Acompanhe necessidades, retornos e encaminhamentos.",
     pedidosOracao: "Acompanhe e atualize o status dos pedidos da comunidade.",
+    pequenosGrupos: "Acompanhe encontros, frequência e líderes de cada grupo.",
+    solicitacoesPg: "Aprove ou recuse solicitações para participar dos grupos.",
     historico: "Consulte registros importantes da caminhada de cada pessoa.",
     relatorios: "Indicadores de cuidado e pendências da comunidade.",
     solicitacoes: "Anonimize os registros após solicitação do titular.",
@@ -839,6 +984,7 @@ function DashboardPage({
       request.criadoEm !== undefined &&
       Date.now() - request.criadoEm.toMillis() > 7 * 24 * 60 * 60 * 1000,
   );
+  const pgAlerts = pgAbsenceAlerts(data);
   const visitorCount = data.pessoas.filter((person) => person.perfil === "VISITANTE" && person.ativo).length;
   const newVisitors = data.pessoas.filter((person) => {
     if (!person.ativo || person.perfil !== "VISITANTE" || !person.criadoEm) return false;
@@ -964,14 +1110,25 @@ function DashboardPage({
                     <button className="text-button" onClick={() => onNavigate("pedidosOracao")}>Ver</button>
                   </div>
                 ) : null}
-                {!overdueFollowUps.length && !overduePrayerRequests.length ? (
+                {!overdueFollowUps.length &&
+                !overduePrayerRequests.length &&
+                !pgAlerts.length ? (
                   <div className="alert-row">
                     <span className="alert-dot alert-dot-green"><Check size={13} /></span>
                     <span><strong>Tudo em dia</strong><small>Não há retornos vencidos nem pedidos antigos.</small></span>
                   </div>
                 ) : null}
               </>
-            ) : <div className="alert-row"><span><strong>Acesso restrito</strong><small>Os acompanhamentos são visíveis somente à função Pastoral.</small></span></div>}
+            ) : (
+              <div className="alert-row"><span><strong>Acesso restrito</strong><small>Os acompanhamentos são visíveis somente à função Pastoral.</small></span></div>
+            )}
+            {pgAlerts.slice(0, 3).map(({ group, person, streak }) => (
+              <div className="alert-row" key={`${group.id}_${person.uid}`}>
+                <span className="alert-dot alert-dot-blue"><Users size={13} /></span>
+                <span><strong>Faltas seguidas no PG</strong><small>{person.nome} · {group.nome} · {streak} encontros</small></span>
+                <button className="text-button" onClick={() => onNavigate("pequenosGrupos")}>Ver</button>
+              </div>
+            ))}
             {visitorCount ? (
               <div className="alert-row">
                 <span className="alert-dot alert-dot-blue"><Users size={13} /></span>
@@ -1266,11 +1423,13 @@ function PrayerRequestsPage({
   requests,
   people,
   search,
+  onRespond,
   onStatusChange,
 }: {
   requests: PrayerRequest[];
   people: Person[];
   search: string;
+  onRespond: (request: PrayerRequest, response: string) => Promise<void>;
   onStatusChange: (request: PrayerRequest, status: PrayerRequestStatus) => void;
 }) {
   const [filter, setFilter] = useState<PrayerRequestStatus>("aberto");
@@ -1306,73 +1465,101 @@ function PrayerRequestsPage({
         </div>
       </div>
       <div className="prayer-request-list">
-        {filtered.map((request) => (
-          <article className="prayer-request-card" key={request.id}>
-            <header className="prayer-request-heading">
-              <div>
-                <h3>{request.titulo}</h3>
-                <span className="prayer-request-author">
-                  {request.autorUid === null
-                    ? "Visitante sem conta"
-                    : people.find((person) => person.uid === request.autorUid)?.nome ??
-                      "Autor não localizado"}
+        {filtered.map((request) => {
+          const hasRegisteredAuthor =
+            typeof request.autorUid === "string" &&
+            request.autorUid.trim().length > 0;
+
+          return (
+            <article className="prayer-request-card" key={request.id}>
+              <header className="prayer-request-heading">
+                <div>
+                  <h3>{request.titulo}</h3>
+                  <span className="prayer-request-author">
+                    {hasRegisteredAuthor
+                      ? people.find((person) => person.uid === request.autorUid)
+                          ?.nome ?? "Autor não localizado"
+                      : "Visitante sem conta"}
+                  </span>
+                </div>
+                <StatusBadge status={request.status} />
+              </header>
+              <p className="prayer-request-text">{request.texto}</p>
+              <div className="prayer-request-meta">
+                <span>{formatPrayerRequestDate(request.criadoEm)}</span>
+                <span>
+                  {request.compartilhadoComPg
+                    ? "Compartilhado com o PG"
+                    : "Não compartilhado com o PG"}
                 </span>
               </div>
-              <StatusBadge status={request.status} />
-            </header>
-            <p className="prayer-request-text">{request.texto}</p>
-            <div className="prayer-request-meta">
-              <span>{formatPrayerRequestDate(request.criadoEm)}</span>
-              <span>
-                {request.compartilhadoComPg
-                  ? "Compartilhado com o PG"
-                  : "Não compartilhado com o PG"}
-              </span>
-            </div>
-            <div className="prayer-request-actions">
-              {request.status === "aberto" ? (
-                <>
-                  <button
-                    className="button button-small button-primary"
-                    onClick={() => onStatusChange(request, "respondido")}
-                  >
-                    Marcar como respondido
-                  </button>
-                  <button
-                    className="button button-small"
-                    onClick={() => onStatusChange(request, "arquivado")}
-                  >
-                    Arquivar
-                  </button>
-                </>
+              {request.respostaPastoral ? (
+                <div className="prayer-response-preview">
+                  <strong>Resposta pastoral</strong>
+                  <p>{request.respostaPastoral}</p>
+                  {request.respondidoPorNome ? (
+                    <small>Respondido por {request.respondidoPorNome}</small>
+                  ) : null}
+                </div>
               ) : null}
-              {request.status === "respondido" ? (
-                <>
-                  <button
-                    className="button button-small"
-                    onClick={() => onStatusChange(request, "aberto")}
-                  >
-                    Reabrir
-                  </button>
-                  <button
-                    className="button button-small"
-                    onClick={() => onStatusChange(request, "arquivado")}
-                  >
-                    Arquivar
-                  </button>
-                </>
+              {!hasRegisteredAuthor ? (
+                <p className="prayer-anonymous-note">
+                  Esta mensagem não poderá ser respondida porque o visitante não
+                  está cadastrado.
+                </p>
+              ) : request.status !== "arquivado" ? (
+                <PrayerResponseForm
+                  request={request}
+                  onSubmit={(response) => onRespond(request, response)}
+                />
               ) : null}
-              {request.status === "arquivado" ? (
-                <button
-                  className="button button-small"
-                  onClick={() => onStatusChange(request, "aberto")}
-                >
-                  Reabrir
-                </button>
+              {hasRegisteredAuthor ? (
+                <div className="prayer-request-actions">
+                  {request.status === "aberto" ? (
+                    <>
+                      <button
+                        className="button button-small button-primary"
+                        onClick={() => onStatusChange(request, "respondido")}
+                      >
+                        Marcar como respondido
+                      </button>
+                      <button
+                        className="button button-small"
+                        onClick={() => onStatusChange(request, "arquivado")}
+                      >
+                        Arquivar
+                      </button>
+                    </>
+                  ) : null}
+                  {request.status === "respondido" ? (
+                    <>
+                      <button
+                        className="button button-small"
+                        onClick={() => onStatusChange(request, "aberto")}
+                      >
+                        Reabrir
+                      </button>
+                      <button
+                        className="button button-small"
+                        onClick={() => onStatusChange(request, "arquivado")}
+                      >
+                        Arquivar
+                      </button>
+                    </>
+                  ) : null}
+                  {request.status === "arquivado" ? (
+                    <button
+                      className="button button-small"
+                      onClick={() => onStatusChange(request, "aberto")}
+                    >
+                      Reabrir
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
-            </div>
-          </article>
-        ))}
+            </article>
+          );
+        })}
         {!filtered.length ? (
           <EmptyState
             icon={<MessageCircle size={22} />}
@@ -1383,6 +1570,277 @@ function PrayerRequestsPage({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function SmallGroupsPage({
+  data,
+  search,
+  canManagePg,
+  onEditLeaders,
+}: {
+  data: PortalData;
+  search: string;
+  canManagePg: boolean;
+  onEditLeaders: (group: SmallGroup) => void;
+}) {
+  const searchTerm = search.toLocaleLowerCase("pt-BR");
+  const groups = data.pequenosGrupos.filter((group) => {
+    const leaderNames = (group.liderUids ?? [])
+      .map((uid) => data.pessoas.find((person) => person.uid === uid)?.nome ?? "")
+      .join(" ");
+    return `${group.nome} ${group.bairro ?? ""} ${group.lideres ?? ""} ${leaderNames}`
+      .toLocaleLowerCase("pt-BR")
+      .includes(searchTerm);
+  });
+  const alerts = pgAbsenceAlerts(data);
+
+  return (
+    <>
+      <div className="family-grid">
+        {groups.map((group) => {
+          const records = data.presencasPg.filter(
+            (record) =>
+              record.grupoId === group.id && record.data <= todayInput(),
+          );
+          const totalPresent = records.reduce(
+            (total, record) => total + record.presentes.length,
+            0,
+          );
+          const leaders = (group.liderUids ?? [])
+            .map((uid) => data.pessoas.find((person) => person.uid === uid)?.nome)
+            .filter((name): name is string => Boolean(name));
+          const leaderNames = leaders.length
+            ? leaders.join(", ")
+            : group.lideres || "Nenhum líder vinculado";
+
+          return (
+            <article className="family-card" key={group.id}>
+              <div className="family-card-top">
+                <div className="family-icon"><Users size={20} /></div>
+                {canManagePg ? (
+                  <button
+                    className="button button-small"
+                    onClick={() => onEditLeaders(group)}
+                  >
+                    Gerenciar líderes
+                  </button>
+                ) : null}
+              </div>
+              <h2>{group.nome}</h2>
+              <p>{group.ativo ? "Grupo ativo" : "Grupo inativo"}</p>
+              <div className="report-lines">
+                <div><span>Encontros registrados</span><strong>{records.length}</strong></div>
+                <div>
+                  <span>Média de presentes</span>
+                  <strong>{records.length ? (totalPresent / records.length).toFixed(1) : "—"}</strong>
+                </div>
+              </div>
+              <div className="family-card-footer">
+                <span><Users size={14} /> {leaderNames}</span>
+              </div>
+            </article>
+          );
+        })}
+        {!groups.length ? (
+          <EmptyState
+            icon={<Users size={22} />}
+            text={data.pequenosGrupos.length ? "Nenhum PG corresponde à busca." : "Nenhum Pequeno Grupo cadastrado."}
+          />
+        ) : null}
+      </div>
+
+      <section className="panel table-panel pg-alert-panel">
+        <div className="table-toolbar">
+          <div>
+            <h2>Participantes com faltas seguidas</h2>
+            <p>Alertas gerados a partir dos três últimos encontros registrados.</p>
+          </div>
+          <span className="inline-stat"><AlertTriangle size={16} /> {alerts.length} alerta(s)</span>
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead><tr><th>PARTICIPANTE</th><th>PEQUENO GRUPO</th><th>FALTAS SEGUIDAS</th></tr></thead>
+            <tbody>
+              {alerts.map(({ group, person, streak }) => (
+                <tr key={`${group.id}_${person.uid}`}>
+                  <td>{person.nome}</td>
+                  <td>{group.nome}</td>
+                  <td>{streak} encontro(s)</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!alerts.length ? (
+            <EmptyState
+              icon={<Check size={22} />}
+              text="Nenhum participante tem três ou mais faltas consecutivas registradas."
+            />
+          ) : null}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function PgRequestsPage({
+  requests,
+  groups,
+  search,
+  onUpdate,
+}: {
+  requests: PgRequest[];
+  groups: SmallGroup[];
+  search: string;
+  onUpdate: (
+    request: PgRequest,
+    status: Extract<PgRequest["status"], "aprovada" | "recusada">,
+  ) => Promise<void>;
+}) {
+  const [busyId, setBusyId] = useState("");
+  const pendingRequests = requests.filter((request) => {
+    const groupName =
+      groups.find((group) => group.id === request.grupoId)?.nome ?? "";
+    return (
+      request.status === "pendente" &&
+      `${request.nome} ${groupName}`
+        .toLocaleLowerCase("pt-BR")
+        .includes(search.toLocaleLowerCase("pt-BR"))
+    );
+  });
+
+  async function update(
+    request: PgRequest,
+    status: Extract<PgRequest["status"], "aprovada" | "recusada">,
+  ) {
+    setBusyId(request.id);
+    try {
+      await onUpdate(request, status);
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  return (
+    <section className="panel table-panel">
+      <div className="table-toolbar">
+        <div>
+          <h2>Solicitações pendentes</h2>
+          <p>{pendingRequests.length} solicitação(ões) aguardando decisão.</p>
+        </div>
+        <span className="inline-stat"><UserPlus size={16} /> {pendingRequests.length} pendente(s)</span>
+      </div>
+      <div className="table-scroll">
+        <table>
+          <thead><tr><th>PESSOA</th><th>PEQUENO GRUPO</th><th>DATA</th><th>AÇÕES</th></tr></thead>
+          <tbody>
+            {pendingRequests.map((request) => (
+              <tr key={request.id}>
+                <td>{request.nome}</td>
+                <td>{groups.find((group) => group.id === request.grupoId)?.nome ?? "Grupo não encontrado"}</td>
+                <td>{request.criadoEm ? formatDate(request.criadoEm.toDate().toISOString().slice(0, 10)) : "—"}</td>
+                <td>
+                  <div className="pg-request-actions">
+                    <button
+                      className="button button-small button-primary"
+                      disabled={busyId === request.id}
+                      onClick={() => void update(request, "aprovada")}
+                    >
+                      Aprovar
+                    </button>
+                    <button
+                      className="button button-small"
+                      disabled={busyId === request.id}
+                      onClick={() => void update(request, "recusada")}
+                    >
+                      Recusar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!pendingRequests.length ? (
+          <EmptyState
+            icon={<Check size={22} />}
+            text={requests.some((request) => request.status === "pendente")
+              ? "Nenhuma solicitação corresponde à busca."
+              : "Não há solicitações de PG pendentes."}
+          />
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function PrayerResponseForm({
+  request,
+  onSubmit,
+}: {
+  request: PrayerRequest;
+  onSubmit: (response: string) => Promise<void>;
+}) {
+  const [response, setResponse] = useState(request.respostaPastoral ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setResponse(request.respostaPastoral ?? "");
+  }, [request.id, request.respostaPastoral]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = response.trim();
+    if (!text || text.length > 2000) {
+      setError("A resposta deve ter entre 1 e 2000 caracteres.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      await onSubmit(text);
+    } catch (submitError) {
+      console.error("Falha ao enviar resposta pastoral:", submitError);
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Não foi possível enviar a resposta. Tente novamente.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="prayer-response-form" onSubmit={submit}>
+      <label className="field">
+        <span>
+          {request.respostaPastoral
+            ? "Editar resposta ao autor"
+            : "Escrever resposta para o autor"}
+        </span>
+        <textarea
+          value={response}
+          onChange={(event) => {
+            setResponse(event.target.value);
+            setError("");
+          }}
+          maxLength={2000}
+          rows={3}
+          required
+        />
+      </label>
+      {error ? <p className="form-error">{error}</p> : null}
+      <button className="button button-primary button-small" disabled={saving}>
+        {saving
+          ? "Enviando..."
+          : request.respostaPastoral
+            ? "Atualizar resposta"
+            : "Enviar resposta"}
+      </button>
+    </form>
   );
 }
 
@@ -1770,6 +2228,91 @@ function FamilyForm({
       </div>
       {error ? <p className="form-error">{error}</p> : null}
       <ModalActions onCancel={onCancel} saving={saving} submitLabel={family ? "Salvar família" : "Criar família"} />
+    </form>
+  );
+}
+
+function GroupLeadersForm({
+  group,
+  data,
+  onCancel,
+  onSave,
+}: {
+  group: SmallGroup;
+  data: PortalData;
+  onCancel: () => void;
+  onSave: (leaderUids: string[]) => Promise<void>;
+}) {
+  const [leaderUids, setLeaderUids] = useState(group.liderUids ?? []);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const members = data.pessoas
+    .filter((person) => person.ativo && person.perfil === "MEMBRO")
+    .sort((left, right) => left.nome.localeCompare(right.nome));
+
+  function toggleLeader(uid: string) {
+    setLeaderUids((current) =>
+      current.includes(uid)
+        ? current.filter((value) => value !== uid)
+        : [...current, uid],
+    );
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(leaderUids);
+    } catch (saveError) {
+      console.error("Falha ao atualizar líderes do PG:", saveError);
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Não foi possível salvar os líderes.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="portal-form" onSubmit={submit}>
+      <ModalHeading
+        eyebrow="PEQUENO GRUPO"
+        title={`Líderes de ${group.nome}`}
+        description="Vincule contas ativas de membros. Os líderes usarão o app para acompanhar pedidos e presença."
+      />
+      <div className="member-picker-heading">
+        <strong>Líderes</strong>
+        <span>{leaderUids.length} selecionado(s)</span>
+      </div>
+      <div className="member-picker">
+        {members.map((person) => (
+          <label className="member-option" key={person.uid}>
+            <input
+              type="checkbox"
+              checked={leaderUids.includes(person.uid)}
+              onChange={() => toggleLeader(person.uid)}
+            />
+            <PersonAvatar person={person} small />
+            <span className="member-option-copy">
+              <strong>{person.nome}</strong>
+              <small>{person.email}</small>
+            </span>
+          </label>
+        ))}
+        {!members.length ? (
+          <p className="muted">Não há membros ativos disponíveis para vincular.</p>
+        ) : null}
+      </div>
+      {error ? <p className="form-error">{error}</p> : null}
+      <ModalActions
+        onCancel={onCancel}
+        saving={saving}
+        submitLabel="Salvar líderes"
+      />
     </form>
   );
 }

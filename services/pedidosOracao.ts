@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -83,32 +84,64 @@ export async function getMeusPedidosOracao(): Promise<PedidoOracao[]> {
     query(collection(db, 'pedidosOracao'), where('autorUid', '==', uid)),
   );
 
-  return snapshot.docs.map((requestDoc) =>
-    mapPedido(
-      requestDoc.id,
-      requestDoc.data() as Omit<PedidoOracao, 'id'>,
-    ),
+  return Promise.all(
+    snapshot.docs.map(async (requestDoc) => {
+      const request = mapPedido(
+        requestDoc.id,
+        requestDoc.data() as Omit<PedidoOracao, 'id'>,
+      );
+      const responseSnapshot = await getDoc(
+        doc(db, 'pedidosOracao', request.id, 'respostas', 'pastoral'),
+      );
+      if (!responseSnapshot.exists()) return request;
+
+      const response = responseSnapshot.data();
+      if (typeof response.texto !== 'string') {
+        throw new Error('A resposta pastoral deste pedido está inválida.');
+      }
+
+      return {
+        ...request,
+        respostaPastoral: response.texto,
+        respondidoPorNome:
+          typeof response.porNome === 'string' ? response.porNome : undefined,
+        respondidoEm: response.em,
+      };
+    }),
   );
 }
 
-export async function getPedidosDoMeuPg(): Promise<PedidoOracao[]> {
+export async function getPedidosDoMeuPg(
+  groupId?: string,
+): Promise<PedidoOracao[]> {
   const uid = auth.currentUser?.uid;
   if (!uid) return [];
 
   const user = await getUser(uid);
-  if (
-    !user?.ativo ||
-    user.perfil !== 'MEMBRO' ||
-    !user.pequenoGrupoId
-  ) {
-    return [];
+  if (!user?.ativo) return [];
+
+  const targetGroupId = groupId ?? user.pequenoGrupoId;
+  if (!targetGroupId) return [];
+  const isMemberOfGroup =
+    user.perfil === 'MEMBRO' && user.pequenoGrupoId === targetGroupId;
+  if (!isMemberOfGroup) {
+    const groupSnapshot = await getDoc(
+      doc(db, 'pequenosGrupos', targetGroupId),
+    );
+    if (
+      !groupSnapshot.exists() ||
+      !Array.isArray(groupSnapshot.data().liderUids) ||
+      !groupSnapshot.data().liderUids.includes(uid)
+    ) {
+      return [];
+    }
   }
 
   const snapshot = await getDocs(
     query(
       collection(db, 'pedidosOracao'),
       where('compartilhadoComPg', '==', true),
-      where('pequenoGrupoId', '==', user.pequenoGrupoId),
+      where('pequenoGrupoId', '==', targetGroupId),
     ),
   );
 

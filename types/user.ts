@@ -25,6 +25,7 @@ export interface AppUser {
   consentimentoLgpd?: LgpdConsent;
   familiaId?: string | null;
   pequenoGrupoId?: string | null;
+  pequenoGrupoDesde?: DataFirestore;
   salaEbdId?: string | null;
   ministerios: string[];
   criadoEm?: DataFirestore;

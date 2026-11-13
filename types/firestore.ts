@@ -93,9 +93,37 @@ export interface PequenoGrupo {
   horario?: string;
   local?: string;
   liderId?: string | null;
+  lideres?: string;
+  liderUids?: string[];
   ativo: boolean;
   criadoEm?: DataFirestore;
   atualizadoEm?: DataFirestore;
+}
+
+export interface SolicitacaoPg {
+  id: string;
+  uid: string;
+  nome: string;
+  grupoId: string;
+  status: 'pendente' | 'aprovada' | 'recusada';
+  criadoEm?: DataFirestore;
+  atualizadoEm?: DataFirestore;
+}
+
+export interface ParticipantePg {
+  uid: string;
+  nome: string;
+  fotoUrl?: string;
+}
+
+export interface PresencaPg {
+  id: string;
+  grupoId: string;
+  data: string;
+  presentes: string[];
+  visitantes: number;
+  registradoPor: string;
+  registradoEm?: DataFirestore;
 }
 
 export interface SalaEbd {
@@ -126,6 +154,9 @@ export interface PedidoOracao {
   compartilhadoComPg: boolean;
   pequenoGrupoId: string | null;
   status: 'aberto' | 'respondido' | 'arquivado';
+  respostaPastoral?: string;
+  respondidoPorNome?: string;
+  respondidoEm?: DataFirestore;
   criadoEm?: DataFirestore;
   atualizadoEm?: DataFirestore;
 }

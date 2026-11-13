@@ -200,6 +200,29 @@ service cloud.firestore {
       return /databases/$(database)/documents/solicitacoesExclusao/$(uid);
     }
 
+    function smallGroupPath(grupoId) {
+      return /databases/$(database)/documents/pequenosGrupos/$(grupoId);
+    }
+
+    function isLiderDoPg(grupoId) {
+      return signedIn()
+        && grupoId is string
+        && exists(smallGroupPath(grupoId))
+        && get(smallGroupPath(grupoId)).data.liderUids is list
+        && request.auth.uid in get(smallGroupPath(grupoId)).data.liderUids;
+    }
+
+    function pgRequestPath(uid, grupoId) {
+      return /databases/$(database)/documents/solicitacoesPg/$(grupoId + '_' + uid);
+    }
+
+    function hasApprovedPgRequest(uid, grupoId) {
+      return existsAfter(pgRequestPath(uid, grupoId))
+        && getAfter(pgRequestPath(uid, grupoId)).data.uid == uid
+        && getAfter(pgRequestPath(uid, grupoId)).data.grupoId == grupoId
+        && getAfter(pgRequestPath(uid, grupoId)).data.status == 'aprovada';
+    }
+
     function pendingLgpdRequest(uid) {
       return exists(deletionRequestPath(uid))
         && !exists(userPath(uid))
@@ -448,6 +471,68 @@ service cloud.firestore {
     function belongsToSmallGroup(groupId) {
       return isMemberOrAdmin()
         && currentUser().pequenoGrupoId == groupId;
+    }
+
+    function isSmallGroupParticipant(groupId) {
+      return signedIn()
+        && hasUserProfile()
+        && currentUser().ativo == true
+        && currentUser().perfil == 'MEMBRO'
+        && currentUser().pequenoGrupoId == groupId;
+    }
+
+    function validPgRequest(data, uid, grupoId) {
+      return data.keys().hasAll([
+          'uid',
+          'nome',
+          'grupoId',
+          'status',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'nome',
+          'grupoId',
+          'status',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.uid == uid
+        && data.nome is string
+        && data.nome.size() > 0
+        && data.nome.size() <= 120
+        && data.grupoId == grupoId
+        && data.status == 'pendente'
+        && data.criadoEm == request.time
+        && data.atualizadoEm == request.time;
+    }
+
+    function validPgAttendance(data, groupId, date) {
+      return data.keys().hasAll([
+          'grupoId',
+          'data',
+          'presentes',
+          'visitantes',
+          'registradoPor',
+          'registradoEm'
+        ])
+        && data.keys().hasOnly([
+          'grupoId',
+          'data',
+          'presentes',
+          'visitantes',
+          'registradoPor',
+          'registradoEm'
+        ])
+        && data.grupoId == groupId
+        && data.data == date
+        && date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.presentes is list
+        && data.visitantes is int
+        && data.visitantes >= 0
+        && data.registradoPor == request.auth.uid
+        && data.registradoEm == request.time;
     }
 
     function validPrayerSharing(data) {
@@ -703,6 +788,33 @@ service cloud.firestore {
           ])
           && request.resource.data.atualizadoEm == request.time
           && validProfileUpdate(request.resource.data)
+        )
+        || (
+          signedIn()
+          && request.auth.uid != uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'pequenoGrupoId',
+            'atualizadoEm'
+          ])
+          && request.resource.data.atualizadoEm == request.time
+          && (
+            (
+              request.resource.data.pequenoGrupoId == null
+              && resource.data.pequenoGrupoId is string
+              && isLiderDoPg(resource.data.pequenoGrupoId)
+            )
+            || (
+              request.resource.data.pequenoGrupoId is string
+              && (
+                !resource.data.keys().hasAny(['pequenoGrupoId'])
+                || resource.data.pequenoGrupoId == null
+              )
+              && resource.data.ativo == true
+              && resource.data.perfil == 'MEMBRO'
+              && isLiderDoPg(request.resource.data.pequenoGrupoId)
+              && hasApprovedPgRequest(uid, request.resource.data.pequenoGrupoId)
+            )
+          )
         );
       allow delete: if signedIn()
         && request.auth.uid == uid
@@ -724,10 +836,89 @@ service cloud.firestore {
     }
 
     match /pequenosGrupos/{grupoId} {
-      allow get, list: if isAdmin()
+      allow get, list: if isCareStaff()
         || resource.data.ativo == true
         || belongsToSmallGroup(grupoId);
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (
+          isSecretaria()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'liderUids',
+            'atualizadoEm'
+          ])
+          && request.resource.data.liderUids is list
+          && request.resource.data.atualizadoEm == request.time
+        );
+
+      match /participantes/{uid} {
+        allow get, list: if isCareStaff()
+          || isLiderDoPg(grupoId)
+          || isSmallGroupParticipant(grupoId);
+        allow create, update, delete: if false;
+      }
+
+      match /participantesMeta/{uid} {
+        allow get, list: if isCareStaff();
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /solicitacoesPg/{solicitacaoId} {
+      allow get, list: if isCareStaff()
+        || (signedIn() && resource.data.uid == request.auth.uid)
+        || isLiderDoPg(resource.data.grupoId);
+      allow create: if isMember()
+        && request.resource.data.grupoId is string
+        && exists(smallGroupPath(request.resource.data.grupoId))
+        && get(smallGroupPath(request.resource.data.grupoId)).data.ativo == true
+        && solicitacaoId == request.resource.data.grupoId + '_' + request.auth.uid
+        && validPgRequest(
+          request.resource.data,
+          request.auth.uid,
+          request.resource.data.grupoId
+        );
+      allow update: if (
+        isCareStaff() || isLiderDoPg(resource.data.grupoId)
+      )
+        && resource.data.status == 'pendente'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'atualizadoEm'
+        ])
+        && request.resource.data.status in ['aprovada', 'recusada']
+        && request.resource.data.atualizadoEm == request.time
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.grupoId == resource.data.grupoId
+        && request.resource.data.nome == resource.data.nome
+        && request.resource.data.criadoEm == resource.data.criadoEm
+        && (
+          isCareStaff()
+          || resource.data.uid != request.auth.uid
+        );
+      allow delete: if false;
+    }
+
+    match /presencasPg/{presencaId} {
+      allow get, list: if isCareStaff()
+        || isLiderDoPg(resource.data.grupoId);
+      allow create: if request.resource.data.grupoId is string
+        && isLiderDoPg(request.resource.data.grupoId)
+        && presencaId == request.resource.data.grupoId + '_' + request.resource.data.data
+        && validPgAttendance(
+          request.resource.data,
+          request.resource.data.grupoId,
+          request.resource.data.data
+        );
+      allow update: if resource.data.grupoId == request.resource.data.grupoId
+        && isLiderDoPg(resource.data.grupoId)
+        && presencaId == request.resource.data.grupoId + '_' + request.resource.data.data
+        && validPgAttendance(
+          request.resource.data,
+          resource.data.grupoId,
+          resource.data.data
+        );
+      allow delete: if false;
     }
 
     match /salasEbd/{salaId} {
@@ -861,7 +1052,10 @@ service cloud.firestore {
         )
         || (
           resource.data.compartilhadoComPg == true
-          && belongsToSmallGroup(resource.data.pequenoGrupoId)
+          && (
+            belongsToSmallGroup(resource.data.pequenoGrupoId)
+            || isLiderDoPg(resource.data.pequenoGrupoId)
+          )
         );
       allow create: if validPrayerCreate(request.resource.data);
       allow update: if (
@@ -895,6 +1089,51 @@ service cloud.firestore {
         );
       allow delete: if signedIn()
         && resource.data.autorUid == request.auth.uid;
+
+      match /respostas/{respostaId} {
+        function prayerRequestExists() {
+          return exists(
+            /databases/$(database)/documents/pedidosOracao/$(pedidoId)
+          );
+        }
+
+        function prayerRequestAuthor() {
+          return get(
+            /databases/$(database)/documents/pedidosOracao/$(pedidoId)
+          ).data.autorUid;
+        }
+
+        function validPastoralResponse(data) {
+          return data.keys().hasAll(['texto', 'por', 'porNome', 'em'])
+            && data.keys().hasOnly(['texto', 'por', 'porNome', 'em'])
+            && data.texto is string
+            && data.texto.size() > 0
+            && data.texto.size() <= 2000
+            && data.por == request.auth.uid
+            && data.porNome is string
+            && data.porNome.size() > 0
+            && data.porNome.size() <= 120
+            && data.porNome == currentUser().nome
+            && data.em == request.time;
+        }
+
+        allow get, list: if prayerRequestExists()
+          && (
+            isPastoral()
+            || (
+              signedIn()
+              && prayerRequestAuthor() == request.auth.uid
+            )
+          );
+        allow create, update: if respostaId == 'pastoral'
+          && isPastoral()
+          && prayerRequestExists()
+          && prayerRequestAuthor() is string
+          && validPastoralResponse(request.resource.data);
+        allow delete: if prayerRequestExists()
+          && signedIn()
+          && prayerRequestAuthor() == request.auth.uid;
+      }
     }
 
     match /auditoria/{auditId} {

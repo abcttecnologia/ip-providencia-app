@@ -279,6 +279,14 @@ tbody tr:hover { background: #fcfdfc; }
 .prayer-request-author { display: block; margin-top: 4px; color: #8a9b91; font-size: 9px; }
 .prayer-request-text { margin: 0; color: #64736a; font-size: 10px; line-height: 1.6; white-space: pre-wrap; }
 .prayer-request-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; color: #8a9b91; font-size: 8px; }
+.prayer-anonymous-note { margin: 0; padding: 10px 12px; color: #8c6637; border-radius: 7px; background: #fbf3e7; font-size: 9px; line-height: 1.5; }
+.prayer-response-preview { display: grid; gap: 6px; padding: 11px 12px; border-radius: 7px; background: #f0f6f1; }
+.prayer-response-preview strong { color: #397455; font-size: 10px; }
+.prayer-response-preview p { margin: 0; color: #64736a; font-size: 10px; line-height: 1.6; white-space: pre-wrap; }
+.prayer-response-preview small { color: #8a9b91; font-size: 8px; }
+.prayer-response-form { display: grid; justify-items: start; gap: 9px; }
+.prayer-response-form .field { width: 100%; }
+.prayer-response-form .field textarea { min-height: 68px; }
 .prayer-request-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .status-respondido { color: #3c7955; background: #eaf4ed; }
 .status-arquivado { color: #8c9390; background: #eff1ef; }
@@ -296,6 +304,10 @@ tbody tr:hover { background: #fcfdfc; }
 .report-lines button span { display: flex; flex: 1; align-items: center; gap: 8px; }
 .report-lines button strong { color: #42564a; }
 .report-lines button:hover { color: #2f694c; }
+.report-lines > div { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: 10px; color: #718078; border-top: 1px solid #eff2ef; font-size: 9px; }
+.report-lines > div strong { color: #42564a; }
+.pg-alert-panel { margin-top: 14px; }
+.pg-request-actions { display: flex; gap: 6px; }
 .text-danger { color: #ad5554 !important; }
 .profile-bars { display: grid; gap: 17px; padding: 7px 0; }
 .profile-bar-row { display: grid; grid-template-columns: 90px 1fr 28px; align-items: center; gap: 9px; color: #78857d; font-size: 9px; }

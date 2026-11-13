@@ -340,6 +340,17 @@ function PrayerCard({
       <Text style={styles.requestDate}>
         {formatRequestDate(request.criadoEm)} · {statusLabels[request.status]}
       </Text>
+      {own && request.respostaPastoral ? (
+        <View style={styles.responseContainer}>
+          <Text style={styles.responseTitle}>Resposta pastoral</Text>
+          <Text style={styles.requestText}>{request.respostaPastoral}</Text>
+          {request.respondidoPorNome ? (
+            <Text style={styles.responseAuthor}>
+              Respondido por {request.respondidoPorNome}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
     </AppCard>
   );
 }
@@ -444,6 +455,24 @@ const styles = StyleSheet.create({
     color: "#777",
     fontSize: 12,
     marginTop: 12,
+    textAlign: "right",
+  },
+  responseContainer: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#EEF5EF",
+  },
+  responseTitle: {
+    color: "#1E5631",
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  responseAuthor: {
+    color: "#66786C",
+    fontSize: 11,
+    marginTop: 8,
     textAlign: "right",
   },
   emptyText: {
