@@ -61,8 +61,16 @@ export async function loadPortalData(): Promise<PortalData> {
     proximoRetorno: dateKey(record.proximoRetorno),
   }));
 
-  pessoas.sort((left, right) => left.nome.localeCompare(right.nome));
-  familias.sort((left, right) => left.nome.localeCompare(right.nome));
+  pessoas.sort((left, right) =>
+    (typeof left.nome === "string" ? left.nome : "").localeCompare(
+      typeof right.nome === "string" ? right.nome : "",
+    ),
+  );
+  familias.sort((left, right) =>
+    (typeof left.nome === "string" ? left.nome : "").localeCompare(
+      typeof right.nome === "string" ? right.nome : "",
+    ),
+  );
   historico.sort((left, right) => right.data.localeCompare(left.data));
   visitas.sort((left, right) => right.data.localeCompare(left.data));
   acompanhamentos.sort((left, right) =>

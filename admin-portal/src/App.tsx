@@ -876,9 +876,9 @@ function PeoplePage({
 }) {
   const [filter, setFilter] = useState("todos");
   const filtered = data.pessoas.filter((person) => {
-    const text = `${person.nome} ${person.email} ${person.telefone ?? ""}`.toLocaleLowerCase("pt-BR");
+    const text = `${person.nome ?? ""} ${person.email ?? ""} ${person.telefone ?? ""}`.toLocaleLowerCase("pt-BR");
     const matchesText = text.includes(search.toLocaleLowerCase("pt-BR"));
-    const matchesFilter = filter === "todos" || (filter === "ativos" ? person.ativo : person.perfil === filter);
+    const matchesFilter = filter === "todos" || (filter === "ativos" ? person.ativo === true : person.perfil === filter);
     return matchesText && matchesFilter;
   });
 
@@ -903,20 +903,25 @@ function PeoplePage({
           <tbody>
             {filtered.map((person) => {
               const family = data.familias.find((item) => item.id === person.familiaId);
+              const profile = typeof person.perfil === "string" ? person.perfil : "";
+              const name =
+                typeof person.nome === "string" && person.nome.trim()
+                  ? person.nome
+                  : "Nome não informado";
               return (
                 <tr key={person.uid}>
-                  <td><div className="person-cell"><PersonAvatar person={person} /><span><strong>{person.nome}</strong><small>{person.email}</small></span></div></td>
+                  <td><div className="person-cell"><PersonAvatar person={person} /><span><strong>{name}</strong><small>{person.email || "—"}</small></span></div></td>
                   <td>{person.telefone || "—"}</td>
-                  <td><span className={`profile-pill profile-${person.perfil.toLocaleLowerCase()}`}>{profileLabel(person.perfil)}</span></td>
+                  <td><span className={`profile-pill ${profile ? `profile-${profile.toLocaleLowerCase()}` : ""}`}>{profileLabel(profile)}</span></td>
                   <td>{family?.nome || "Sem vínculo"}</td>
-                  <td><StatusBadge status={person.ativo ? "ativo" : "inativo"} /></td>
+                  <td><StatusBadge status={person.ativo === true ? "ativo" : "inativo"} /></td>
                   <td><button className="button button-small" onClick={() => onEdit(person)}>Ver cadastro</button></td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        {!filtered.length ? <EmptyState icon={<Users size={22} />} text="Nenhum cadastro corresponde à busca." /> : null}
+        {!filtered.length ? <EmptyState icon={<Users size={22} />} text={data.pessoas.length ? "Nenhum cadastro corresponde à busca ou ao filtro." : "Nenhuma pessoa cadastrada ainda."} /> : null}
       </div>
     </section>
   );
@@ -1083,15 +1088,19 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function PersonAvatar({ person, small = false }: { person: Person; small?: boolean }) {
+  const name =
+    typeof person.nome === "string" && person.nome.trim()
+      ? person.nome
+      : "Nome não informado";
   return (
     <span
       className={`avatar ${small ? "avatar-small" : ""}`}
-      title={person.nome}
+      title={name}
     >
       {person.fotoUrl ? (
         <img src={person.fotoUrl} alt="" />
       ) : (
-        firstName(person.nome).slice(0, 1).toUpperCase()
+        name.slice(0, 1).toUpperCase()
       )}
     </span>
   );
@@ -1430,9 +1439,13 @@ function FollowUpForm({
   );
 }
 
-function profileLabel(profile: Person["perfil"]) {
-  const labels: Record<Person["perfil"], string> = { VISITANTE: "Visitante", MEMBRO: "Membro", ADMINISTRADOR: "Administrador" };
-  return labels[profile];
+function profileLabel(profile: string | undefined) {
+  const labels: Record<string, string> = {
+    VISITANTE: "Visitante",
+    MEMBRO: "Membro",
+    ADMINISTRADOR: "Administrador",
+  };
+  return profile ? labels[profile] ?? "Perfil não informado" : "Perfil não informado";
 }
 
 function historyLabel(kind: HistoryKind) {
