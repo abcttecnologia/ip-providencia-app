@@ -240,7 +240,7 @@ export default function ComunhaoScreen() {
         {isAdmin ? (
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push('/admin/conteudo')}
+            onPress={() => router.push('/admin')}
             style={{
               flexDirection: 'row',
               alignItems: 'center',

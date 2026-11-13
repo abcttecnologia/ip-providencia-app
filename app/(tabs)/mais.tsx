@@ -294,7 +294,7 @@ import { useCurrentUserProfile } from '../../hooks/useCurrentUserProfile';
 
           {user?.ativo && user.perfil === 'ADMINISTRADOR' ? (
             <Pressable
-              onPress={() => router.push('/admin/conteudo')}
+              onPress={() => router.push('/admin')}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',

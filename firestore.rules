@@ -120,6 +120,14 @@ service cloud.firestore {
 
     function validProfileUpdate(data) {
       return (
+          !data.keys().hasAny(['nome'])
+          || (
+            data.nome is string
+            && data.nome.size() > 0
+            && data.nome.size() <= 120
+          )
+        )
+        && (
           !data.keys().hasAny(['perfil'])
           || data.perfil in ['VISITANTE', 'MEMBRO', 'ADMINISTRADOR']
         )
@@ -127,7 +135,200 @@ service cloud.firestore {
           !data.keys().hasAny(['ativo'])
           || data.ativo is bool
         )
+        && (
+          !data.keys().hasAny(['membroDesde'])
+          || data.membroDesde is timestamp
+        )
         && validOptionalUserFields(data);
+    }
+
+    function validAdminCreatedUser(uid, data) {
+      return data.keys().hasAll([
+          'uid',
+          'email',
+          'nome',
+          'perfil',
+          'ativo',
+          'ministerios',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'email',
+          'nome',
+          'telefone',
+          'perfil',
+          'ativo',
+          'ministerios',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.uid == uid
+        && data.email is string
+        && data.email.size() > 0
+        && data.nome is string
+        && data.nome.size() > 0
+        && data.nome.size() <= 120
+        && (
+          !data.keys().hasAny(['telefone'])
+          || data.telefone is string
+        )
+        && data.perfil == 'VISITANTE'
+        && data.ativo == true
+        && data.ministerios is list
+        && data.ministerios.size() == 0
+        && data.criadoEm == request.time
+        && data.atualizadoEm == request.time;
+    }
+
+    function validMemberHistory(data) {
+      return data.keys().hasAll([
+          'pessoaUid',
+          'tipo',
+          'data',
+          'descricao',
+          'criadoPor',
+          'criadoPorNome',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.keys().hasOnly([
+          'pessoaUid',
+          'tipo',
+          'data',
+          'descricao',
+          'criadoPor',
+          'criadoPorNome',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.pessoaUid is string
+        && data.pessoaUid.size() > 0
+        && data.pessoaUid.size() <= 128
+        && exists(userPath(data.pessoaUid))
+        && data.tipo in ['admissao', 'batismo', 'transferencia', 'observacao']
+        && data.data is timestamp
+        && data.data >= timestamp.date(1900, 1, 1)
+        && data.data < timestamp.date(2200, 1, 1)
+        && data.descricao is string
+        && data.descricao.size() > 0
+        && data.descricao.size() <= 2000
+        && data.criadoPor is string
+        && data.criadoPorNome is string
+        && data.criadoPorNome.size() > 0
+        && data.criadoPorNome.size() <= 120;
+    }
+
+    function validRecordTarget(data) {
+      return (
+          data.alvoTipo == 'pessoa'
+          && exists(userPath(data.alvoId))
+        )
+        || (
+          data.alvoTipo == 'familia'
+          && exists(
+            /databases/$(database)/documents/familias/$(data.alvoId)
+          )
+        );
+    }
+
+    function validPastoralVisit(data) {
+      return data.keys().hasAll([
+          'alvoTipo',
+          'alvoId',
+          'alvoNome',
+          'data',
+          'motivo',
+          'visitante',
+          'observacoes',
+          'status',
+          'criadoPor',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.keys().hasOnly([
+          'alvoTipo',
+          'alvoId',
+          'alvoNome',
+          'data',
+          'motivo',
+          'visitante',
+          'observacoes',
+          'status',
+          'criadoPor',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.alvoTipo in ['pessoa', 'familia']
+        && data.alvoId is string
+        && data.alvoId.size() > 0
+        && data.alvoId.size() <= 128
+        && data.alvoNome is string
+        && data.alvoNome.size() > 0
+        && data.alvoNome.size() <= 120
+        && data.data is timestamp
+        && data.data >= timestamp.date(1900, 1, 1)
+        && data.data < timestamp.date(2200, 1, 1)
+        && data.motivo is string
+        && data.motivo.size() <= 160
+        && data.visitante is string
+        && data.visitante.size() > 0
+        && data.visitante.size() <= 120
+        && data.observacoes is string
+        && data.observacoes.size() <= 2000
+        && data.status in ['agendada', 'realizada', 'cancelada']
+        && data.criadoPor is string
+        && validRecordTarget(data);
+    }
+
+    function validPastoralFollowUp(data) {
+      return data.keys().hasAll([
+          'alvoTipo',
+          'alvoId',
+          'alvoNome',
+          'categoria',
+          'necessidade',
+          'responsavel',
+          'proximoRetorno',
+          'status',
+          'criadoPor',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.keys().hasOnly([
+          'alvoTipo',
+          'alvoId',
+          'alvoNome',
+          'categoria',
+          'necessidade',
+          'responsavel',
+          'proximoRetorno',
+          'status',
+          'criadoPor',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.alvoTipo in ['pessoa', 'familia']
+        && data.alvoId is string
+        && data.alvoId.size() > 0
+        && data.alvoId.size() <= 128
+        && data.alvoNome is string
+        && data.alvoNome.size() > 0
+        && data.alvoNome.size() <= 120
+        && data.categoria in ['espiritual', 'saude', 'familia', 'social', 'outro']
+        && data.necessidade is string
+        && data.necessidade.size() > 0
+        && data.necessidade.size() <= 2000
+        && data.responsavel is string
+        && data.responsavel.size() > 0
+        && data.responsavel.size() <= 120
+        && data.proximoRetorno is timestamp
+        && data.proximoRetorno >= timestamp.date(1900, 1, 1)
+        && data.proximoRetorno < timestamp.date(2200, 1, 1)
+        && data.status in ['aberto', 'em_andamento', 'concluido']
+        && data.criadoPor is string
+        && validRecordTarget(data);
     }
 
     function ownsToken(tokenData) {
@@ -289,7 +490,8 @@ service cloud.firestore {
     match /users/{uid} {
       allow get: if (signedIn() && request.auth.uid == uid) || isAdmin();
       allow list: if isAdmin();
-      allow create: if signedIn()
+      allow create: if (
+        signedIn()
         && request.auth.uid == uid
         && request.resource.data.keys().hasAll([
           'uid',
@@ -319,7 +521,11 @@ service cloud.firestore {
         && request.resource.data.ministerios is list
         && request.resource.data.ministerios.size() == 0
         && request.resource.data.criadoEm == request.time
-        && request.resource.data.atualizadoEm == request.time;
+        && request.resource.data.atualizadoEm == request.time
+      ) || (
+        isAdmin()
+        && validAdminCreatedUser(uid, request.resource.data)
+      );
       allow update: if (
           signedIn()
           && request.auth.uid == uid
@@ -389,6 +595,80 @@ service cloud.firestore {
         || (isMember() && currentUser().familiaId == familiaId);
       allow list: if isAdmin();
       allow create, update, delete: if isAdmin();
+    }
+
+    match /historicoMembros/{registroId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+        && validMemberHistory(request.resource.data)
+        && request.resource.data.criadoPor == request.auth.uid
+        && request.resource.data.criadoPorNome == currentUser().nome
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'tipo',
+          'data',
+          'descricao',
+          'atualizadoEm'
+        ])
+        && validMemberHistory(request.resource.data)
+        && request.resource.data.criadoPor == resource.data.criadoPor
+        && request.resource.data.criadoEm == resource.data.criadoEm
+        && request.resource.data.atualizadoEm == request.time;
+      allow delete: if false;
+    }
+
+    match /visitas/{visitaId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+        && validPastoralVisit(request.resource.data)
+        && request.resource.data.criadoPor == request.auth.uid
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'alvoTipo',
+          'alvoId',
+          'alvoNome',
+          'data',
+          'motivo',
+          'visitante',
+          'observacoes',
+          'status',
+          'atualizadoEm'
+        ])
+        && validPastoralVisit(request.resource.data)
+        && request.resource.data.criadoPor == resource.data.criadoPor
+        && request.resource.data.criadoEm == resource.data.criadoEm
+        && request.resource.data.atualizadoEm == request.time;
+      allow delete: if false;
+    }
+
+    match /acompanhamentos/{acompanhamentoId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+        && validPastoralFollowUp(request.resource.data)
+        && request.resource.data.criadoPor == request.auth.uid
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'alvoTipo',
+          'alvoId',
+          'alvoNome',
+          'categoria',
+          'necessidade',
+          'responsavel',
+          'proximoRetorno',
+          'status',
+          'atualizadoEm'
+        ])
+        && validPastoralFollowUp(request.resource.data)
+        && request.resource.data.criadoPor == resource.data.criadoPor
+        && request.resource.data.criadoEm == resource.data.criadoEm
+        && request.resource.data.atualizadoEm == request.time;
+      allow delete: if false;
     }
 
     match /pedidosOracao/{pedidoId} {
