@@ -12,13 +12,13 @@ npm run dev
 
 Durante o desenvolvimento, o Vite lê as variáveis `EXPO_PUBLIC_FIREBASE_*` do `.env.local` na raiz do repositório. Para outros ambientes, configure as variáveis `VITE_FIREBASE_*` listadas em `.env.example`.
 
-O acesso exige uma conta autenticada com perfil `ADMINISTRADOR` e `ativo: true` na coleção `users`. O cadastro de uma pessoa cria uma conta de visitante e envia um e-mail para definir a senha; o provedor de autenticação por e-mail e senha do Firebase precisa estar habilitado.
+O acesso exige uma conta existente e ativa na coleção `users`: perfil `ADMINISTRADOR` ou as funções `SECRETARIA`, `PASTORAL` ou `TESOURARIA`. As contas são criadas somente pelo aplicativo; o portal não cria usuários nem contas no Firebase Authentication. Somente administradores ativos podem alterar `perfil`, `ativo` e as funções de outras pessoas. Ninguém pode alterar as próprias funções.
 
 ## Dados e permissões
 
-O portal reutiliza as coleções `users` e `familias`. Histórico, visitas e acompanhamentos são armazenados em `historicoMembros`, `visitas` e `acompanhamentos`. As regras correspondentes estão em `../firestore.rules` e precisam ser publicadas no Firebase antes de usar esses recursos.
+O portal reutiliza as coleções `users` e `familias`. Histórico, visitas e acompanhamentos são armazenados em `historicoMembros`, `visitas` e `acompanhamentos`. A função `TESOURARIA` vê somente a área “Em breve”; acompanhamentos são carregados apenas para `PASTORAL`. As solicitações de exclusão são tratadas separadamente pela Administração e pela Pastoral. As regras correspondentes estão em `../firestore.rules` e precisam ser publicadas no Firebase antes de usar esses recursos.
 
-Os registros de histórico são imutáveis no portal; visitas e acompanhamentos podem ser atualizados, mas não excluídos. O acesso às novas coleções e a criação de contas pelo portal são restritos a administradores ativos.
+Registros de histórico podem ser editados quanto ao tipo, data e descrição, mas não excluídos — exceto durante a anonimização LGPD. Visitas e acompanhamentos podem ser atualizados, mas não excluídos. As alterações em usuários, famílias, histórico, visitas e acompanhamentos geram registros de auditoria.
 
 ## Verificação de produção
 

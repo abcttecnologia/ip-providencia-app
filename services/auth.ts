@@ -1,5 +1,6 @@
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
@@ -13,31 +14,35 @@ import { desativarNotificacoes } from './notificacoes';
 export async function register(
   nome: string,
   email: string,
-  password: string
+  password: string,
+  consentimentoAceito: boolean,
 ) {
+  if (!consentimentoAceito) {
+    throw new Error('É necessário aceitar a Política de Privacidade.');
+  }
+
   const credential = await createUserWithEmailAndPassword(
     auth,
     email,
     password
   );
 
-  await ensureUserProfile(
-    credential.user.uid,
-    credential.user.email,
-    nome,
-  );
+  try {
+    await ensureUserProfile(
+      credential.user.uid,
+      credential.user.email,
+      nome,
+      true,
+    );
+  } catch (error) {
+    await deleteUser(credential.user);
+    throw error;
+  }
 
   return credential.user;
 }
 export async function login(email: string, password: string) {
-  const credential = await signInWithEmailAndPassword(auth, email, password);
-
-  await ensureUserProfile(
-    credential.user.uid,
-    credential.user.email,
-  );
-
-  return credential;
+  return signInWithEmailAndPassword(auth, email, password);
 }
 
 export async function resetPassword(email: string) {

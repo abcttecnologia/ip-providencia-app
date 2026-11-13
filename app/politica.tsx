@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
+// TODO: texto pendente de aprovação da igreja.
 export default function PoliticaScreen() {
   return (
     <>

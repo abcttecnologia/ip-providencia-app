@@ -24,6 +24,37 @@ service cloud.firestore {
         && currentUser().perfil == 'ADMINISTRADOR';
     }
 
+    function hasFuncao(funcao) {
+      return hasUserProfile()
+        && currentUser().ativo == true
+        && currentUser().funcoes is list
+        && currentUser().funcoes.hasAny([funcao]);
+    }
+
+    function isSecretaria() {
+      return hasFuncao('SECRETARIA');
+    }
+
+    function isPastoral() {
+      return hasFuncao('PASTORAL');
+    }
+
+    function isTesouraria() {
+      return hasFuncao('TESOURARIA');
+    }
+
+    function isStaff() {
+      return isAdmin() || isSecretaria() || isPastoral() || isTesouraria();
+    }
+
+    function isCareStaff() {
+      return isAdmin() || isSecretaria() || isPastoral();
+    }
+
+    function canManageContent() {
+      return isAdmin() || isSecretaria();
+    }
+
     function isMember() {
       return hasUserProfile()
         && currentUser().ativo == true
@@ -118,6 +149,28 @@ service cloud.firestore {
         );
     }
 
+    function validConsent(data) {
+      return data.keys().hasAny(['consentimentoLgpd'])
+        && data.consentimentoLgpd is map
+        && data.consentimentoLgpd.keys().hasAll(['versao', 'aceitoEm'])
+        && data.consentimentoLgpd.keys().hasOnly(['versao', 'aceitoEm'])
+        && data.consentimentoLgpd.versao == '1.0'
+        && data.consentimentoLgpd.aceitoEm == request.time;
+    }
+
+    function validUserFunctions(data) {
+      return !data.keys().hasAny(['funcoes'])
+        || (
+          data.funcoes is list
+          && data.funcoes.size() <= 3
+          && data.funcoes.hasOnly([
+            'SECRETARIA',
+            'PASTORAL',
+            'TESOURARIA'
+          ])
+        );
+    }
+
     function validProfileUpdate(data) {
       return (
           !data.keys().hasAny(['nome'])
@@ -139,47 +192,86 @@ service cloud.firestore {
           !data.keys().hasAny(['membroDesde'])
           || data.membroDesde is timestamp
         )
-        && validOptionalUserFields(data);
+        && validOptionalUserFields(data)
+        && validUserFunctions(data);
     }
 
-    function validAdminCreatedUser(uid, data) {
+    function deletionRequestPath(uid) {
+      return /databases/$(database)/documents/solicitacoesExclusao/$(uid);
+    }
+
+    function pendingLgpdRequest(uid) {
+      return exists(deletionRequestPath(uid))
+        && !exists(userPath(uid))
+        && get(deletionRequestPath(uid)).data.uid == uid
+        && get(deletionRequestPath(uid)).data.status == 'pendente'
+        && get(deletionRequestPath(uid)).data.motivoExclusao == 'lgpd';
+    }
+
+    function pendingAdminAnonymization(uid) {
+      return pendingLgpdRequest(uid)
+        && get(deletionRequestPath(uid)).data.anonimizacaoAdminOk == false;
+    }
+
+    function pendingPastoralAnonymization(uid) {
+      return pendingLgpdRequest(uid)
+        && get(deletionRequestPath(uid)).data.anonimizacaoPastoralOk == false;
+    }
+
+    function validAudit(data) {
+      return data.keys().hasAll([
+          'acao',
+          'colecao',
+          'docId',
+          'por',
+          'porNome',
+          'em'
+        ])
+        && data.keys().hasOnly([
+          'acao',
+          'colecao',
+          'docId',
+          'por',
+          'porNome',
+          'em'
+        ])
+        && data.acao in ['criar', 'editar', 'excluir', 'anonimizar']
+        && data.colecao is string
+        && data.docId is string
+        && data.por == request.auth.uid
+        && data.porNome is string
+        && data.em == request.time;
+    }
+
+    function validDeletionRequest(uid, data) {
       return data.keys().hasAll([
           'uid',
-          'email',
           'nome',
-          'perfil',
-          'ativo',
-          'ministerios',
+          'email',
+          'status',
           'criadoEm',
-          'atualizadoEm'
+          'motivoExclusao',
+          'anonimizacaoAdminOk',
+          'anonimizacaoPastoralOk'
         ])
         && data.keys().hasOnly([
           'uid',
-          'email',
           'nome',
-          'telefone',
-          'perfil',
-          'ativo',
-          'ministerios',
+          'email',
+          'status',
           'criadoEm',
-          'atualizadoEm'
+          'motivoExclusao',
+          'anonimizacaoAdminOk',
+          'anonimizacaoPastoralOk'
         ])
         && data.uid == uid
-        && data.email is string
-        && data.email.size() > 0
         && data.nome is string
-        && data.nome.size() > 0
-        && data.nome.size() <= 120
-        && (
-          !data.keys().hasAny(['telefone'])
-          || data.telefone is string
-        )
-        && data.perfil == 'VISITANTE'
-        && data.ativo == true
-        && data.ministerios is list
-        && data.ministerios.size() == 0
+        && data.email is string
+        && data.status == 'pendente'
         && data.criadoEm == request.time
-        && data.atualizadoEm == request.time;
+        && data.motivoExclusao == 'lgpd'
+        && data.anonimizacaoAdminOk == false
+        && data.anonimizacaoPastoralOk == false;
     }
 
     function validMemberHistory(data) {
@@ -418,7 +510,7 @@ service cloud.firestore {
 
     match /Avisos/{documentId} {
       allow get, list: if canReadAudience(resource.data);
-      allow create: if isAdmin()
+      allow create: if canManageContent()
         && validAudience(request.resource.data)
         && (
           !request.resource.data.keys().hasAny(['categoria'])
@@ -428,7 +520,7 @@ service cloud.firestore {
             'comunhao'
           ]
         );
-      allow update: if isAdmin()
+      allow update: if canManageContent()
         && validAudience(request.resource.data)
         && (
           !request.resource.data.keys().hasAny(['categoria'])
@@ -438,41 +530,41 @@ service cloud.firestore {
             'comunhao'
           ]
         );
-      allow delete: if isAdmin();
+      allow delete: if canManageContent();
     }
 
     match /biblioteca/{documentId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if canManageContent();
     }
 
     match /campanha/{documentId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if canManageContent();
     }
 
     match /config/{documentId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if canManageContent();
     }
 
     match /eventos/{documentId} {
       allow get, list: if canReadAudience(resource.data);
-      allow create, update: if isAdmin()
+      allow create, update: if canManageContent()
         && validAudience(request.resource.data)
         && (
           !request.resource.data.keys().hasAny(['categoria'])
           || request.resource.data.categoria is string
         );
-      allow delete: if isAdmin();
+      allow delete: if canManageContent();
     }
 
     match /versiculo/{documentId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if canManageContent();
     }
 
-        match /pushTokens/{tokenId} {
+    match /pushTokens/{tokenId} {
       allow read: if isAdmin() || ownsToken(resource.data);
       allow create: if isAdmin() || (
         ownsToken(request.resource.data)
@@ -488,11 +580,11 @@ service cloud.firestore {
 
 
     match /users/{uid} {
-      allow get: if (signedIn() && request.auth.uid == uid) || isAdmin();
-      allow list: if isAdmin();
-      allow create: if (
-        signedIn()
+      allow get: if (signedIn() && request.auth.uid == uid) || isCareStaff();
+      allow list: if isCareStaff();
+      allow create: if signedIn()
         && request.auth.uid == uid
+        && !exists(deletionRequestPath(uid))
         && request.resource.data.keys().hasAll([
           'uid',
           'email',
@@ -501,7 +593,8 @@ service cloud.firestore {
           'ativo',
           'ministerios',
           'criadoEm',
-          'atualizadoEm'
+          'atualizadoEm',
+          'consentimentoLgpd'
         ])
         && request.resource.data.keys().hasOnly([
           'uid',
@@ -511,21 +604,21 @@ service cloud.firestore {
           'ativo',
           'ministerios',
           'criadoEm',
-          'atualizadoEm'
+          'atualizadoEm',
+          'consentimentoLgpd'
         ])
         && request.resource.data.uid == uid
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.nome is string
+        && request.resource.data.nome.size() > 0
+        && request.resource.data.nome.size() <= 120
         && request.resource.data.perfil == 'VISITANTE'
         && request.resource.data.ativo == true
         && request.resource.data.ministerios is list
         && request.resource.data.ministerios.size() == 0
         && request.resource.data.criadoEm == request.time
         && request.resource.data.atualizadoEm == request.time
-      ) || (
-        isAdmin()
-        && validAdminCreatedUser(uid, request.resource.data)
-      );
+        && validConsent(request.resource.data);
       allow update: if (
           signedIn()
           && request.auth.uid == uid
@@ -542,27 +635,81 @@ service cloud.firestore {
           && validOptionalUserFields(request.resource.data)
         )
         || (
-          isAdmin()
+          signedIn()
+          && request.auth.uid == uid
+          && resource.data.keys().hasAny(['consentimentoLgpd']) == false
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['consentimentoLgpd'])
+          && validConsent(request.resource.data)
+        )
+        || (
+          isCareStaff()
+          && request.auth.uid != uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'nome',
             'telefone',
             'endereco',
             'dataNascimento',
             'estadoCivil',
-            'fotoUrl',
-            'perfil',
-            'ativo',
-            'ministerios',
+            'familiaId',
             'pequenoGrupoId',
             'salaEbdId',
-            'familiaId',
+            'ministerios',
             'membroDesde',
             'atualizadoEm'
           ])
           && request.resource.data.atualizadoEm == request.time
           && validProfileUpdate(request.resource.data)
+        )
+        || (
+          isAdmin()
+          && request.auth.uid != uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'nome',
+            'telefone',
+            'endereco',
+            'dataNascimento',
+            'estadoCivil',
+            'familiaId',
+            'pequenoGrupoId',
+            'salaEbdId',
+            'ministerios',
+            'membroDesde',
+            'perfil',
+            'ativo',
+            'funcoes',
+            'atualizadoEm'
+          ])
+          && request.resource.data.atualizadoEm == request.time
+          && validProfileUpdate(request.resource.data)
+        )
+        || (
+          isAdmin()
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'nome',
+            'telefone',
+            'endereco',
+            'dataNascimento',
+            'estadoCivil',
+            'familiaId',
+            'pequenoGrupoId',
+            'salaEbdId',
+            'ministerios',
+            'membroDesde',
+            'perfil',
+            'ativo',
+            'atualizadoEm'
+          ])
+          && request.resource.data.atualizadoEm == request.time
+          && validProfileUpdate(request.resource.data)
         );
-      allow delete: if isAdmin();
+      allow delete: if signedIn()
+        && request.auth.uid == uid
+        && existsAfter(deletionRequestPath(uid))
+        && getAfter(deletionRequestPath(uid)).data.uid == uid
+        && getAfter(deletionRequestPath(uid)).data.status == 'pendente'
+        && getAfter(deletionRequestPath(uid)).data.motivoExclusao == 'lgpd';
     }
 
     match /ministerios/{ministerioId} {
@@ -591,21 +738,25 @@ service cloud.firestore {
     }
 
     match /familias/{familiaId} {
-      allow get: if isAdmin()
-        || (isMember() && currentUser().familiaId == familiaId);
-      allow list: if isAdmin();
-      allow create, update, delete: if isAdmin();
+      allow get: if isCareStaff()
+        || (
+          signedIn()
+          && hasUserProfile()
+          && currentUser().familiaId == familiaId
+        );
+      allow list: if isCareStaff();
+      allow create, update, delete: if isCareStaff();
     }
 
     match /historicoMembros/{registroId} {
-      allow get, list: if isAdmin();
-      allow create: if isAdmin()
+      allow get, list: if isCareStaff();
+      allow create: if isCareStaff()
         && validMemberHistory(request.resource.data)
         && request.resource.data.criadoPor == request.auth.uid
         && request.resource.data.criadoPorNome == currentUser().nome
         && request.resource.data.criadoEm == request.time
         && request.resource.data.atualizadoEm == request.time;
-      allow update: if isAdmin()
+      allow update: if isCareStaff()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'tipo',
           'data',
@@ -616,17 +767,19 @@ service cloud.firestore {
         && request.resource.data.criadoPor == resource.data.criadoPor
         && request.resource.data.criadoEm == resource.data.criadoEm
         && request.resource.data.atualizadoEm == request.time;
-      allow delete: if false;
+      allow delete: if isAdmin()
+        && pendingAdminAnonymization(resource.data.pessoaUid);
     }
 
     match /visitas/{visitaId} {
-      allow get, list: if isAdmin();
-      allow create: if isAdmin()
+      allow get, list: if isCareStaff();
+      allow create: if isCareStaff()
         && validPastoralVisit(request.resource.data)
         && request.resource.data.criadoPor == request.auth.uid
         && request.resource.data.criadoEm == request.time
         && request.resource.data.atualizadoEm == request.time;
-      allow update: if isAdmin()
+      allow update: if (
+        isCareStaff()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'alvoTipo',
           'alvoId',
@@ -641,18 +794,34 @@ service cloud.firestore {
         && validPastoralVisit(request.resource.data)
         && request.resource.data.criadoPor == resource.data.criadoPor
         && request.resource.data.criadoEm == resource.data.criadoEm
-        && request.resource.data.atualizadoEm == request.time;
+        && request.resource.data.atualizadoEm == request.time
+      ) || (
+        isAdmin()
+        && resource.data.alvoTipo == 'pessoa'
+        && pendingAdminAnonymization(resource.data.alvoId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'alvoNome',
+          'motivo',
+          'observacoes',
+          'atualizadoEm'
+        ])
+        && request.resource.data.alvoNome == 'Removido a pedido do titular'
+        && request.resource.data.motivo == ''
+        && request.resource.data.observacoes == ''
+        && request.resource.data.atualizadoEm == request.time
+      );
       allow delete: if false;
     }
 
     match /acompanhamentos/{acompanhamentoId} {
-      allow get, list: if isAdmin();
-      allow create: if isAdmin()
+      allow get, list: if isPastoral();
+      allow create: if isPastoral()
         && validPastoralFollowUp(request.resource.data)
         && request.resource.data.criadoPor == request.auth.uid
         && request.resource.data.criadoEm == request.time
         && request.resource.data.atualizadoEm == request.time;
-      allow update: if isAdmin()
+      allow update: if (
+        isPastoral()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'alvoTipo',
           'alvoId',
@@ -667,12 +836,25 @@ service cloud.firestore {
         && validPastoralFollowUp(request.resource.data)
         && request.resource.data.criadoPor == resource.data.criadoPor
         && request.resource.data.criadoEm == resource.data.criadoEm
-        && request.resource.data.atualizadoEm == request.time;
+        && request.resource.data.atualizadoEm == request.time
+      ) || (
+        isPastoral()
+        && resource.data.alvoTipo == 'pessoa'
+        && pendingPastoralAnonymization(resource.data.alvoId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'alvoNome',
+          'necessidade',
+          'atualizadoEm'
+        ])
+        && request.resource.data.alvoNome == 'Removido a pedido do titular'
+        && request.resource.data.necessidade == ''
+        && request.resource.data.atualizadoEm == request.time
+      );
       allow delete: if false;
     }
 
     match /pedidosOracao/{pedidoId} {
-      allow get, list: if isAdmin()
+      allow get, list: if isPastoral()
         || (
           signedIn()
           && resource.data.autorUid == request.auth.uid
@@ -683,8 +865,13 @@ service cloud.firestore {
         );
       allow create: if validPrayerCreate(request.resource.data);
       allow update: if (
-          isAdmin()
-          && request.resource.data.status in ['aberto', 'respondido', 'arquivado']
+            isPastoral()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status',
+              'atualizadoEm'
+            ])
+            && request.resource.data.status in ['aberto', 'respondido', 'arquivado']
+            && request.resource.data.atualizadoEm == request.time
         )
         || (
           signedIn()
@@ -706,11 +893,49 @@ service cloud.firestore {
           && request.resource.data.atualizadoEm == request.time
           && validPrayerSharing(request.resource.data)
         );
-      allow delete: if isAdmin()
-        || (
-          signedIn()
-          && resource.data.autorUid == request.auth.uid
-        );
+      allow delete: if signedIn()
+        && resource.data.autorUid == request.auth.uid;
+    }
+
+    match /auditoria/{auditId} {
+      allow create: if isStaff()
+        && validAudit(request.resource.data);
+      allow get, list: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /solicitacoesExclusao/{uid} {
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && validDeletionRequest(uid, request.resource.data)
+        && request.resource.data.email == request.auth.token.email;
+      allow get, list: if isAdmin() || isPastoral();
+      allow update: if (
+        isAdmin()
+        && resource.data.status == 'pendente'
+        && resource.data.motivoExclusao == 'lgpd'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['anonimizacaoAdminOk', 'status'])
+        && request.resource.data.anonimizacaoAdminOk == true
+        && request.resource.data.anonimizacaoPastoralOk
+          == resource.data.anonimizacaoPastoralOk
+        && (
+          request.resource.data.status == 'pendente'
+          || (
+            request.resource.data.status == 'concluida'
+            && request.resource.data.anonimizacaoPastoralOk == true
+          )
+        )
+      ) || (
+        isPastoral()
+        && resource.data.status == 'pendente'
+        && resource.data.motivoExclusao == 'lgpd'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['anonimizacaoPastoralOk'])
+        && resource.data.anonimizacaoPastoralOk == false
+        && request.resource.data.anonimizacaoPastoralOk == true
+      );
+      allow delete: if false;
     }
 
     match /anotacoes/{anotacaoId} {

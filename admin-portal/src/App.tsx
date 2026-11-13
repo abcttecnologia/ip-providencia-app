@@ -22,15 +22,19 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  Trash2,
   UserPlus,
   Users,
+  Wallet,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import {
+  anonymizeAdminRecords,
+  anonymizePastoralRecords,
   addMemberHistory,
-  createPortalPerson,
+  completeDeletionRequest,
   loadPortalData,
   saveFamily,
   saveFollowUp,
@@ -38,8 +42,10 @@ import {
   signOutPortal,
   updatePerson,
 } from "./data";
+import type { PortalActor } from "./data";
 import { auth, db } from "./firebase";
 import type {
+  DeletionRequest,
   Family,
   FollowUp,
   FollowUpStatus,
@@ -49,14 +55,24 @@ import type {
   Person,
   PortalData,
   RecordTarget,
+  UserFunction,
   VisitStatus,
 } from "./types";
 
-type PageKey = "dashboard" | "pessoas" | "familias" | "visitas" | "acompanhamentos" | "historico" | "relatorios";
+type PageKey =
+  | "dashboard"
+  | "pessoas"
+  | "familias"
+  | "visitas"
+  | "acompanhamentos"
+  | "historico"
+  | "relatorios"
+  | "solicitacoes"
+  | "tesouraria";
 type ModalState =
-  | { kind: "person"; person: Person | null }
+  | { kind: "person"; person: Person }
   | { kind: "family"; family: Family | null }
-  | { kind: "history" }
+  | { kind: "history"; history: MemberHistory | null }
   | { kind: "visit"; visit: PastoralVisit | null }
   | { kind: "followup"; followup: FollowUp | null }
   | null;
@@ -69,6 +85,8 @@ const navigation: { key: PageKey; label: string; icon: typeof LayoutDashboard }[
   { key: "acompanhamentos", label: "Acompanhamentos", icon: HeartHandshake },
   { key: "historico", label: "Histórico", icon: FileClock },
   { key: "relatorios", label: "Relatórios", icon: ClipboardList },
+  { key: "solicitacoes", label: "Solicitações de exclusão", icon: Trash2 },
+  { key: "tesouraria", label: "Tesouraria", icon: Wallet },
 ];
 
 const pageTitles: Record<PageKey, { title: string; eyebrow: string }> = {
@@ -79,7 +97,42 @@ const pageTitles: Record<PageKey, { title: string; eyebrow: string }> = {
   acompanhamentos: { title: "Acompanhamentos", eyebrow: "CUIDADO PASTORAL" },
   historico: { title: "Histórico", eyebrow: "REGISTROS DA IGREJA" },
   relatorios: { title: "Relatórios", eyebrow: "MONITORAMENTO" },
+  solicitacoes: { title: "Solicitações de exclusão", eyebrow: "PRIVACIDADE E LGPD" },
+  tesouraria: { title: "Tesouraria", eyebrow: "GESTÃO FINANCEIRA" },
 };
+
+function isAdmin(profile: Person) {
+  return profile.perfil === "ADMINISTRADOR" && profile.ativo;
+}
+
+function hasFunction(profile: Person, functionName: UserFunction) {
+  return profile.ativo && profile.funcoes?.includes(functionName) === true;
+}
+
+function isPastoral(profile: Person) {
+  return hasFunction(profile, "PASTORAL");
+}
+
+function isCareStaff(profile: Person) {
+  return (
+    isAdmin(profile) ||
+    hasFunction(profile, "SECRETARIA") ||
+    isPastoral(profile)
+  );
+}
+
+function isPortalStaff(profile: Person) {
+  return isCareStaff(profile) || hasFunction(profile, "TESOURARIA");
+}
+
+function portalActor(profile: Person): PortalActor {
+  return {
+    uid: profile.uid,
+    nome: profile.nome,
+    perfil: profile.perfil,
+    funcoes: profile.funcoes,
+  };
+}
 
 function firstName(name: string | undefined) {
   return name?.trim().split(/\s+/)[0] || "Administrador";
@@ -90,6 +143,12 @@ function formatDate(value: string) {
   return date && !Number.isNaN(date.getTime())
     ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date)
     : "—";
+}
+
+function timestampInput(value: Person["membroDesde"]) {
+  if (!value) return "";
+  if (typeof value === "string") return value.slice(0, 10);
+  return value.toDate().toISOString().slice(0, 10);
 }
 
 function todayInput() {
@@ -159,11 +218,8 @@ function App() {
           ? ({ ...profileSnapshot.data(), uid: currentUser.uid } as Person)
           : null;
 
-        if (
-          currentProfile?.ativo !== true ||
-          currentProfile.perfil !== "ADMINISTRADOR"
-        ) {
-          setAccessError("Esta conta não possui acesso administrativo ativo.");
+        if (!currentProfile || !isPortalStaff(currentProfile)) {
+          setAccessError("Esta conta não possui permissão ativa para acessar o portal.");
           setProfile(null);
         } else {
           setProfile(currentProfile);
@@ -210,7 +266,22 @@ function App() {
     );
   }
 
-  return <AdminPortal profile={profile} onSignOut={handleSignOut} />;
+  if (!isPortalStaff(profile)) {
+    return (
+      <AccessDenied
+        message="Seu perfil não tem mais acesso autorizado ao portal."
+        onSignOut={handleSignOut}
+      />
+    );
+  }
+
+  return (
+    <AdminPortal
+      profile={profile}
+      onProfileUpdate={setProfile}
+      onSignOut={handleSignOut}
+    />
+  );
 }
 
 function LoadingPage({ message }: { message: string }) {
@@ -269,7 +340,7 @@ function LoginPage({ accessError }: { accessError: string }) {
         <div className="login-copy">
           <span className="eyebrow">ACESSO RESTRITO</span>
           <h1>Bem-vindo de volta</h1>
-          <p>Entre com sua conta administrativa para continuar.</p>
+          <p>Entre com sua conta autorizada para continuar.</p>
         </div>
         <form className="login-form" onSubmit={submit}>
           <label htmlFor="login-email">E-mail</label>
@@ -296,7 +367,7 @@ function LoginPage({ accessError }: { accessError: string }) {
             {saving ? "Entrando..." : "Entrar no portal"}
           </button>
         </form>
-        <p className="login-footnote"><ShieldCheck size={15} /> Acesso protegido para administradores</p>
+        <p className="login-footnote"><ShieldCheck size={15} /> Acesso protegido para equipe autorizada</p>
       </section>
       <aside className="login-art">
         <div className="art-glow" />
@@ -326,12 +397,20 @@ function AccessDenied({ message, onSignOut }: { message: string; onSignOut: () =
 
 function AdminPortal({
   profile,
+  onProfileUpdate,
   onSignOut,
 }: {
   profile: Person;
+  onProfileUpdate: (profile: Person) => void;
   onSignOut: () => void;
 }) {
-  const [page, setPage] = useState<PageKey>("dashboard");
+  const canCare = isCareStaff(profile);
+  const canViewPastoral = isPastoral(profile);
+  const canReadDeletionRequests = isAdmin(profile) || canViewPastoral;
+  const isAdministrator = isAdmin(profile);
+  const [page, setPage] = useState<PageKey>(
+    canCare ? "dashboard" : "tesouraria",
+  );
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -341,26 +420,74 @@ function AdminPortal({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
-  const refresh = useCallback(async (showSpinner = false) => {
-    if (showSpinner) setRefreshing(true);
-    try {
-      const result = await loadPortalData();
-      setData(result);
-      setError("");
-    } catch (loadError) {
-      console.error("Falha ao carregar os dados do portal:", loadError);
-      setError("Não foi possível carregar os dados. Confira a conexão e as regras do Firestore.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  const refresh = useCallback(
+    async (showSpinner = false) => {
+      if (showSpinner) setRefreshing(true);
+      try {
+        const result = canCare
+          ? await loadPortalData({
+              pastoral: canViewPastoral,
+              exclusionRequests: canReadDeletionRequests,
+            })
+          : {
+              pessoas: [],
+              familias: [],
+              historico: [],
+              visitas: [],
+              acompanhamentos: [],
+              solicitacoesExclusao: [],
+            };
+        setData(result);
+        const currentProfile = result.pessoas.find(
+          (person) => person.uid === profile.uid,
+        );
+        if (currentProfile) onProfileUpdate(currentProfile);
+        setError("");
+      } catch (loadError) {
+        console.error("Falha ao carregar os dados do portal:", loadError);
+        setError("Não foi possível carregar os dados. Confira a conexão e as regras do Firestore.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [canCare, canReadDeletionRequests, canViewPastoral, onProfileUpdate, profile.uid],
+  );
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const title = pageTitles[page];
+  const visibleNavigation = navigation.filter(({ key }) => {
+    if (key === "tesouraria") return hasFunction(profile, "TESOURARIA");
+    if (key === "acompanhamentos") return canViewPastoral;
+    if (key === "solicitacoes") return canReadDeletionRequests;
+    return canCare;
+  });
+  const roleDescription = isAdministrator
+    ? "Administrador"
+    : [
+        hasFunction(profile, "SECRETARIA") ? "Secretaria" : "",
+        canViewPastoral ? "Pastoral" : "",
+        hasFunction(profile, "TESOURARIA") ? "Tesouraria" : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+  useEffect(() => {
+    const pageIsAllowed =
+      (page === "tesouraria" && hasFunction(profile, "TESOURARIA")) ||
+      (page === "acompanhamentos" && canViewPastoral) ||
+      (page === "solicitacoes" && canReadDeletionRequests) ||
+      (page !== "tesouraria" &&
+        page !== "acompanhamentos" &&
+        page !== "solicitacoes" &&
+        canCare);
+    if (!pageIsAllowed) {
+      setPage(canCare ? "dashboard" : "tesouraria");
+    }
+  }, [page, profile, canCare, canReadDeletionRequests, canViewPastoral]);
 
   async function runAction(action: () => Promise<void>, successMessage: string) {
     await action();
@@ -370,7 +497,22 @@ function AdminPortal({
     window.setTimeout(() => setNotice(""), 4500);
   }
 
+  function runActionSafely(
+    action: () => Promise<void>,
+    successMessage: string,
+  ) {
+    void runAction(action, successMessage).catch((actionError: unknown) => {
+      console.error("Falha ao executar ação do portal:", actionError);
+      setError(
+        actionError instanceof Error
+          ? actionError.message
+          : "Não foi possível concluir a ação. Tente novamente.",
+      );
+    });
+  }
+
   function navigate(nextPage: PageKey) {
+    if (!visibleNavigation.some(({ key }) => key === nextPage)) return;
     setPage(nextPage);
     setSidebarOpen(false);
     setQuery("");
@@ -404,7 +546,7 @@ function AdminPortal({
         </div>
         <div className="sidebar-section-label">MENU PRINCIPAL</div>
         <nav className="side-nav" aria-label="Navegação principal">
-          {navigation.map(({ key, label, icon: Icon }) => (
+          {visibleNavigation.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               className={`nav-item ${page === key ? "nav-item-active" : ""}`}
@@ -426,7 +568,7 @@ function AdminPortal({
         </div>
         <div className="sidebar-profile">
           <div className="avatar avatar-dark">{firstName(profile.nome).slice(0, 1).toUpperCase()}</div>
-          <div className="profile-copy"><strong>{profile.nome}</strong><span>Administrador</span></div>
+          <div className="profile-copy"><strong>{profile.nome}</strong><span>{roleDescription}</span></div>
           <button className="icon-button" aria-label="Sair do portal" onClick={onSignOut}><LogOut size={17} /></button>
         </div>
       </aside>
@@ -436,7 +578,7 @@ function AdminPortal({
           <button className="icon-button mobile-menu" aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}><Menu size={21} /></button>
           <div className="breadcrumb"><span>Portal</span><ChevronRight size={14} /><strong>{title.title}</strong></div>
           <div className="topbar-actions">
-            <label className="global-search">
+            {canCare ? <label className="global-search">
               <Search size={16} />
               <input
                 placeholder="Buscar pessoas, famílias..."
@@ -445,7 +587,7 @@ function AdminPortal({
                 aria-label="Buscar pessoas e famílias"
               />
               <kbd>⌘ K</kbd>
-            </label>
+            </label> : null}
             <span className="topbar-date"><CalendarDays size={15} />{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date())}</span>
           </div>
         </header>
@@ -459,21 +601,22 @@ function AdminPortal({
             </div>
             <div className="page-heading-actions">
               {refreshing ? <span className="refresh-indicator"><LoaderCircle className="spin" size={16} /> Atualizando</span> : null}
-              {page === "pessoas" ? <button className="button button-primary" onClick={() => setModal({ kind: "person", person: null })}><UserPlus size={16} /> Nova pessoa</button> : null}
               {page === "familias" ? <button className="button button-primary" onClick={() => setModal({ kind: "family", family: null })}><Plus size={17} /> Nova família</button> : null}
               {page === "visitas" ? <button className="button button-primary" onClick={() => setModal({ kind: "visit", visit: null })}><Plus size={17} /> Registrar visita</button> : null}
               {page === "acompanhamentos" ? <button className="button button-primary" onClick={() => setModal({ kind: "followup", followup: null })}><Plus size={17} /> Novo acompanhamento</button> : null}
-              {page === "historico" ? <button className="button button-primary" onClick={() => setModal({ kind: "history" })}><Plus size={17} /> Novo registro</button> : null}
+              {page === "historico" ? <button className="button button-primary" onClick={() => setModal({ kind: "history", history: null })}><Plus size={17} /> Novo registro</button> : null}
             </div>
           </div>
 
           {error ? <div className="notice notice-error"><AlertTriangle size={18} /><span>{error}</span><button className="button button-small" onClick={() => void refresh(true)}>Tentar novamente</button></div> : null}
           {notice ? <div className="notice notice-success"><Check size={18} /><span>{notice}</span><button className="icon-button" aria-label="Dispensar" onClick={() => setNotice("")}><X size={16} /></button></div> : null}
-          {page === "dashboard" ? <DashboardPage data={data} onNavigate={navigate} /> : null}
+          {page === "dashboard" ? <DashboardPage data={data} onNavigate={navigate} canViewPastoral={canViewPastoral} /> : null}
           {page === "pessoas" ? (
             <PeoplePage
               data={data}
               search={query}
+              actorUid={profile.uid}
+              canManageAccess={isAdministrator}
               onEdit={(person) => setModal({ kind: "person", person })}
             />
           ) : null}
@@ -498,9 +641,35 @@ function AdminPortal({
               onEdit={(followup) => setModal({ kind: "followup", followup })}
             />
           ) : null}
-          {page === "historico" ? <HistoryPage data={data} search={query} /> : null}
-          {page === "relatorios" ? <ReportsPage data={data} onNavigate={navigate} /> : null}
-          <footer className="page-footer"><span>IP Providência · Portal de gestão</span><span>Dados protegidos por acesso administrativo</span></footer>
+          {page === "historico" ? <HistoryPage data={data} search={query} onEdit={(history) => setModal({ kind: "history", history })} /> : null}
+          {page === "relatorios" ? <ReportsPage data={data} onNavigate={navigate} canViewPastoral={canViewPastoral} /> : null}
+          {page === "solicitacoes" ? (
+            <DeletionRequestsPage
+              requests={data.solicitacoesExclusao}
+              isAdministrator={isAdministrator}
+              canViewPastoral={canViewPastoral}
+              onAdminAnonymize={(request) =>
+                runActionSafely(
+                  () => anonymizeAdminRecords(request, portalActor(profile)),
+                  "Visitas e histórico anonimizados.",
+                )
+              }
+              onPastoralAnonymize={(request) =>
+                runActionSafely(
+                  () => anonymizePastoralRecords(request, portalActor(profile)),
+                  "Acompanhamentos anonimizados.",
+                )
+              }
+              onComplete={(request) =>
+                runActionSafely(
+                  () => completeDeletionRequest(request, portalActor(profile)),
+                  "Solicitação concluída.",
+                )
+              }
+            />
+          ) : null}
+          {page === "tesouraria" ? <TreasuryPage /> : null}
+          <footer className="page-footer"><span>IP Providência · Portal de gestão</span><span>Dados protegidos por perfil de acesso</span></footer>
         </section>
       </main>
 
@@ -509,21 +678,18 @@ function AdminPortal({
           {modal.kind === "person" ? (
             <PersonForm
               person={modal.person}
+              actorUid={profile.uid}
+              canManageAccess={isAdministrator}
+              families={data.familias}
               onCancel={() => setModal(null)}
               onSave={(person) =>
                 runAction(
-                  async () => {
-                    if (modal.person) {
-                      await updatePerson(
-                        modal.person.uid,
-                        person,
-                        modal.person.perfil,
-                      );
-                    } else {
-                      await createPortalPerson(person);
-                    }
-                  },
-                  modal.person ? "Cadastro atualizado." : "Pessoa cadastrada. Um e-mail para definir a senha foi enviado.",
+                  () => updatePerson(
+                    modal.person.uid,
+                    person,
+                    portalActor(profile),
+                  ),
+                  "Cadastro atualizado.",
                 )
               }
             />
@@ -538,6 +704,7 @@ function AdminPortal({
                   () => saveFamily(
                     family,
                     modal.family,
+                    portalActor(profile),
                   ),
                   modal.family ? "Família atualizada." : "Família cadastrada.",
                 )
@@ -548,9 +715,13 @@ function AdminPortal({
             <HistoryForm
               data={data}
               profile={profile}
+              history={modal.history}
               onCancel={() => setModal(null)}
               onSave={(history) =>
-                runAction(() => addMemberHistory(history), "Registro adicionado ao histórico.")
+                runAction(
+                  () => addMemberHistory(history, portalActor(profile), modal.history?.id),
+                  modal.history ? "Registro do histórico atualizado." : "Registro adicionado ao histórico.",
+                )
               }
             />
           ) : null}
@@ -562,7 +733,7 @@ function AdminPortal({
               onCancel={() => setModal(null)}
               onSave={(visit) =>
                 runAction(
-                  () => saveVisit(visit, modal.visit?.id),
+                  () => saveVisit(visit, portalActor(profile), modal.visit?.id),
                   modal.visit ? "Visita atualizada." : "Visita registrada.",
                 )
               }
@@ -576,7 +747,7 @@ function AdminPortal({
               onCancel={() => setModal(null)}
               onSave={(followup) =>
                 runAction(
-                  () => saveFollowUp(followup, modal.followup?.id),
+                  () => saveFollowUp(followup, portalActor(profile), modal.followup?.id),
                   modal.followup ? "Acompanhamento atualizado." : "Acompanhamento registrado.",
                 )
               }
@@ -597,6 +768,8 @@ function pageDescription(page: PageKey) {
     acompanhamentos: "Acompanhe necessidades, retornos e encaminhamentos.",
     historico: "Consulte registros importantes da caminhada de cada pessoa.",
     relatorios: "Indicadores de cuidado e pendências da comunidade.",
+    solicitacoes: "Anonimize os registros após solicitação do titular.",
+    tesouraria: "Área reservada para gestão financeira.",
   };
   return descriptions[page];
 }
@@ -604,16 +777,20 @@ function pageDescription(page: PageKey) {
 function DashboardPage({
   data,
   onNavigate,
+  canViewPastoral,
 }: {
   data: PortalData;
   onNavigate: (page: PageKey) => void;
+  canViewPastoral: boolean;
 }) {
   const now = new Date();
   const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const visitsThisMonth = data.visitas.filter((visit) => {
     return visit.data.startsWith(monthPrefix) && visit.status !== "cancelada";
   }).length;
-  const openFollowUps = data.acompanhamentos.filter((item) => item.status !== "concluido");
+  const openFollowUps = canViewPastoral
+    ? data.acompanhamentos.filter((item) => item.status !== "concluido")
+    : [];
   const visitorCount = data.pessoas.filter((person) => person.perfil === "VISITANTE" && person.ativo).length;
   const newVisitors = data.pessoas.filter((person) => {
     if (!person.ativo || person.perfil !== "VISITANTE" || !person.criadoEm) return false;
@@ -675,7 +852,7 @@ function DashboardPage({
         <MetricCard icon={<House size={19} />} label="Famílias cadastradas" value={data.familias.length} tone="blue" footnote="núcleos familiares" />
         <MetricCard icon={<UserPlus size={19} />} label="Novos visitantes" value={newVisitors} tone="purple" footnote="neste mês" />
         <MetricCard icon={<Home size={19} />} label="Visitas este mês" value={visitsThisMonth} tone="orange" footnote="visitas registradas" />
-        <MetricCard icon={<AlertTriangle size={19} />} label="Acompanhamentos" value={openFollowUps.length} tone="red" footnote="em aberto" />
+        {canViewPastoral ? <MetricCard icon={<AlertTriangle size={19} />} label="Acompanhamentos" value={openFollowUps.length} tone="red" footnote="em aberto" /> : null}
       </section>
 
       <section className="dashboard-grid">
@@ -693,7 +870,7 @@ function DashboardPage({
           ) : <EmptyState icon={<CalendarDays size={22} />} text="Nenhuma visita agendada." />}
         </Panel>
 
-        <Panel title="Acompanhamentos em aberto" subtitle="Pessoas que precisam de retorno" action="Ver todos" onAction={() => onNavigate("acompanhamentos")} icon={<HeartHandshake size={17} />}>
+        {canViewPastoral ? <Panel title="Acompanhamentos em aberto" subtitle="Pessoas que precisam de retorno" action="Ver todos" onAction={() => onNavigate("acompanhamentos")} icon={<HeartHandshake size={17} />}>
           {openFollowUps.length ? (
             <div className="compact-list">
               {openFollowUps.slice(0, 4).map((item) => (
@@ -705,7 +882,7 @@ function DashboardPage({
               ))}
             </div>
           ) : <EmptyState icon={<Check size={22} />} text="Nenhum acompanhamento pendente." />}
-        </Panel>
+        </Panel> : null}
 
         <Panel title="Visitas recentes" subtitle="Últimos registros" action="Ver histórico" onAction={() => onNavigate("visitas")} icon={<FileClock size={17} />}>
           {data.visitas.length ? (
@@ -722,7 +899,7 @@ function DashboardPage({
 
         <Panel title="Alertas e pendências" subtitle="Ações que merecem atenção" icon={<AlertTriangle size={17} />}>
           <div className="alert-list">
-            {overdueFollowUps.length ? (
+            {canViewPastoral && overdueFollowUps.length ? (
               overdueFollowUps.slice(0, 3).map((item) => (
                 <div className="alert-row" key={item.id}>
                   <span className="alert-dot alert-dot-red"><AlertTriangle size={13} /></span>
@@ -730,12 +907,12 @@ function DashboardPage({
                   <ArrowRight size={15} />
                 </div>
               ))
-            ) : (
+            ) : canViewPastoral ? (
               <div className="alert-row">
                 <span className="alert-dot alert-dot-green"><Check size={13} /></span>
                 <span><strong>Tudo em dia</strong><small>Não há retornos vencidos no momento.</small></span>
               </div>
-            )}
+            ) : <div className="alert-row"><span><strong>Acesso restrito</strong><small>Os acompanhamentos são visíveis somente à função Pastoral.</small></span></div>}
             {visitorCount ? (
               <div className="alert-row">
                 <span className="alert-dot alert-dot-blue"><Users size={13} /></span>
@@ -785,8 +962,8 @@ function DashboardPage({
           <FlowStep icon={<House size={17} />} number="02" title="Família" detail="Núcleo familiar" count={data.familias.length} tone="blue" />
           <FlowStep icon={<FileClock size={17} />} number="03" title="Histórico" detail="Registros importantes" count={data.historico.length} tone="purple" />
           <FlowStep icon={<Home size={17} />} number="04" title="Visitas" detail="Cuidado presencial" count={data.visitas.length} tone="orange" />
-          <FlowStep icon={<HeartHandshake size={17} />} number="05" title="Acompanhamento" detail="Necessidades e retornos" count={openFollowUps.length} tone="red" />
-          <FlowStep icon={<Activity size={17} />} number="06" title="Monitoramento" detail="Indicadores e alertas" count={overdueFollowUps.length} tone="teal" />
+          {canViewPastoral ? <FlowStep icon={<HeartHandshake size={17} />} number="05" title="Acompanhamento" detail="Necessidades e retornos" count={openFollowUps.length} tone="red" /> : null}
+          {canViewPastoral ? <FlowStep icon={<Activity size={17} />} number="06" title="Monitoramento" detail="Indicadores e alertas" count={overdueFollowUps.length} tone="teal" /> : null}
         </div>
       </section>
     </>
@@ -868,10 +1045,14 @@ function FlowStep({
 function PeoplePage({
   data,
   search,
+  actorUid,
+  canManageAccess,
   onEdit,
 }: {
   data: PortalData;
   search: string;
+  actorUid: string;
+  canManageAccess: boolean;
   onEdit: (person: Person) => void;
 }) {
   const [filter, setFilter] = useState("todos");
@@ -915,7 +1096,15 @@ function PeoplePage({
                   <td><span className={`profile-pill ${profile ? `profile-${profile.toLocaleLowerCase()}` : ""}`}>{profileLabel(profile)}</span></td>
                   <td>{family?.nome || "Sem vínculo"}</td>
                   <td><StatusBadge status={person.ativo === true ? "ativo" : "inativo"} /></td>
-                  <td><button className="button button-small" onClick={() => onEdit(person)}>Ver cadastro</button></td>
+                  <td>
+                    <button
+                      className="button button-small"
+                      onClick={() => onEdit(person)}
+                      disabled={!canManageAccess && person.uid === actorUid}
+                    >
+                      {person.uid === actorUid && !canManageAccess ? "Seu cadastro" : "Editar"}
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -1014,7 +1203,15 @@ function FollowUpsPage({
   );
 }
 
-function HistoryPage({ data, search }: { data: PortalData; search: string }) {
+function HistoryPage({
+  data,
+  search,
+  onEdit,
+}: {
+  data: PortalData;
+  search: string;
+  onEdit: (history: MemberHistory) => void;
+}) {
   const records = data.historico.filter((item) => {
     const person = data.pessoas.find((candidate) => candidate.uid === item.pessoaUid);
     return `${person?.nome ?? ""} ${item.descricao} ${item.tipo}`.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR"));
@@ -1025,7 +1222,7 @@ function HistoryPage({ data, search }: { data: PortalData; search: string }) {
       <div className="history-list">
         {records.map((item) => {
           const person = data.pessoas.find((candidate) => candidate.uid === item.pessoaUid);
-          return <article className="history-row" key={item.id}><div className="timeline-dot" /><div className="history-date">{formatDate(item.data)}</div><div className="history-copy"><span className={`history-kind kind-${item.tipo}`}>{historyLabel(item.tipo)}</span><strong>{person?.nome ?? "Pessoa não encontrada"}</strong><p>{item.descricao}</p><small>Registrado por {item.criadoPorNome}</small></div></article>;
+          return <article className="history-row" key={item.id}><div className="timeline-dot" /><div className="history-date">{formatDate(item.data)}</div><div className="history-copy"><span className={`history-kind kind-${item.tipo}`}>{historyLabel(item.tipo)}</span><strong>{person?.nome ?? "Pessoa não encontrada"}</strong><p>{item.descricao}</p><small>Registrado por {item.criadoPorNome}</small></div><button className="button button-small" onClick={() => onEdit(item)}>Editar</button></article>;
         })}
         {!records.length ? <EmptyState icon={<FileClock size={22} />} text="Nenhum registro de histórico." /> : null}
       </div>
@@ -1033,8 +1230,72 @@ function HistoryPage({ data, search }: { data: PortalData; search: string }) {
   );
 }
 
-function ReportsPage({ data, onNavigate }: { data: PortalData; onNavigate: (page: PageKey) => void }) {
-  const openFollowUps = data.acompanhamentos.filter((item) => item.status !== "concluido");
+function DeletionRequestsPage({
+  requests,
+  isAdministrator,
+  canViewPastoral,
+  onAdminAnonymize,
+  onPastoralAnonymize,
+  onComplete,
+}: {
+  requests: DeletionRequest[];
+  isAdministrator: boolean;
+  canViewPastoral: boolean;
+  onAdminAnonymize: (request: DeletionRequest) => void;
+  onPastoralAnonymize: (request: DeletionRequest) => void;
+  onComplete: (request: DeletionRequest) => void;
+}) {
+  return (
+    <section className="panel table-panel">
+      <div className="table-toolbar">
+        <div>
+          <h2>Solicitações pendentes</h2>
+          <p>As etapas de Administração e Pastoral são independentes.</p>
+        </div>
+        <span className="inline-stat"><Trash2 size={16} /> {requests.length} pendente(s)</span>
+      </div>
+      <div className="table-scroll">
+        <table>
+          <thead><tr><th>TITULAR</th><th>ADMINISTRAÇÃO</th><th>PASTORAL</th><th>AÇÕES</th></tr></thead>
+          <tbody>
+            {requests.map((request) => (
+              <tr key={request.uid}>
+                <td><div className="person-cell"><div className="avatar avatar-light"><Trash2 size={16} /></div><span><strong>{request.nome}</strong><small>{request.email}</small></span></div></td>
+                <td><StatusBadge status={request.anonimizacaoAdminOk ? "concluido" : "pendente"} /></td>
+                <td><StatusBadge status={request.anonimizacaoPastoralOk ? "concluido" : "pendente"} /></td>
+                <td>
+                  <div className="table-action-group">
+                    {isAdministrator && !request.anonimizacaoAdminOk ? <button className="button button-small" onClick={() => onAdminAnonymize(request)}>Anonimizar visitas e histórico</button> : null}
+                    {canViewPastoral && !request.anonimizacaoPastoralOk ? <button className="button button-small" onClick={() => onPastoralAnonymize(request)}>Anonimizar acompanhamentos</button> : null}
+                    {isAdministrator && request.anonimizacaoAdminOk && request.anonimizacaoPastoralOk ? <button className="button button-small button-primary" onClick={() => onComplete(request)}>Concluir</button> : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!requests.length ? <EmptyState icon={<Check size={22} />} text="Não há solicitações de exclusão pendentes." /> : null}
+      </div>
+    </section>
+  );
+}
+
+function TreasuryPage() {
+  return (
+    <section className="panel">
+      <div className="empty-state">
+        <div className="empty-icon"><Wallet size={22} /></div>
+        <p><strong>Tesouraria em breve</strong></p>
+        <p>Esta área ainda não está disponível. Nenhum dado financeiro foi carregado.</p>
+      </div>
+    </section>
+  );
+}
+
+function ReportsPage({ data, onNavigate, canViewPastoral }: { data: PortalData; onNavigate: (page: PageKey) => void; canViewPastoral: boolean }) {
+  const openFollowUps = canViewPastoral
+    ? data.acompanhamentos.filter((item) => item.status !== "concluido")
+    : [];
   const overdue = openFollowUps.filter((item) => {
     return isPastDate(item.proximoRetorno);
   });
@@ -1047,11 +1308,11 @@ function ReportsPage({ data, onNavigate }: { data: PortalData; onNavigate: (page
     <>
       <section className="report-stat-grid">{profiles.map((item) => <article className={`report-stat report-${item.color}`} key={item.label}><span>{item.label}</span><strong>{item.value}</strong></article>)}</section>
       <div className="reports-grid">
-        <Panel title="Indicadores de cuidado" subtitle="Acompanhamento pastoral" icon={<Activity size={17} />}>
+        <Panel title="Indicadores de cuidado" subtitle="Registros disponíveis ao seu perfil" icon={<Activity size={17} />}>
           <div className="report-lines">
             <button onClick={() => onNavigate("visitas")}><span><Home size={16} /> Visitas registradas</span><strong>{data.visitas.length}</strong><ChevronRight size={16} /></button>
-            <button onClick={() => onNavigate("acompanhamentos")}><span><HeartHandshake size={16} /> Acompanhamentos em aberto</span><strong>{openFollowUps.length}</strong><ChevronRight size={16} /></button>
-            <button onClick={() => onNavigate("acompanhamentos")}><span><AlertTriangle size={16} /> Retornos vencidos</span><strong className={overdue.length ? "text-danger" : ""}>{overdue.length}</strong><ChevronRight size={16} /></button>
+            {canViewPastoral ? <button onClick={() => onNavigate("acompanhamentos")}><span><HeartHandshake size={16} /> Acompanhamentos em aberto</span><strong>{openFollowUps.length}</strong><ChevronRight size={16} /></button> : null}
+            {canViewPastoral ? <button onClick={() => onNavigate("acompanhamentos")}><span><AlertTriangle size={16} /> Retornos vencidos</span><strong className={overdue.length ? "text-danger" : ""}>{overdue.length}</strong><ChevronRight size={16} /></button> : null}
             <button onClick={() => onNavigate("historico")}><span><FileText size={16} /> Registros no histórico</span><strong>{data.historico.length}</strong><ChevronRight size={16} /></button>
           </div>
         </Panel>
@@ -1081,6 +1342,7 @@ function StatusBadge({ status }: { status: string }) {
     realizada: "Realizada",
     cancelada: "Cancelada",
     aberto: "Em aberto",
+    pendente: "Pendente",
     em_andamento: "Em andamento",
     concluido: "Concluído",
   };
@@ -1139,23 +1401,43 @@ function ModalActions({ onCancel, saving, submitLabel }: { onCancel: () => void;
 
 function PersonForm({
   person,
+  actorUid,
+  canManageAccess,
+  families,
   onCancel,
   onSave,
 }: {
-  person: Person | null;
+  person: Person;
+  actorUid: string;
+  canManageAccess: boolean;
+  families: Family[];
   onCancel: () => void;
-  onSave: (value: { nome: string; email: string; telefone: string } & Pick<Person, "endereco" | "dataNascimento" | "estadoCivil" | "perfil" | "ativo">) => Promise<void>;
+  onSave: (value: Pick<Person, "nome" | "telefone" | "endereco" | "dataNascimento" | "estadoCivil" | "familiaId" | "pequenoGrupoId" | "salaEbdId" | "ministerios" | "perfil" | "ativo" | "funcoes"> & { membroDesde: string }) => Promise<void>;
 }) {
-  const [nome, setNome] = useState(person?.nome ?? "");
-  const [email, setEmail] = useState(person?.email ?? "");
-  const [telefone, setTelefone] = useState(person?.telefone ?? "");
-  const [endereco, setEndereco] = useState(person?.endereco ?? "");
-  const [dataNascimento, setDataNascimento] = useState(person?.dataNascimento ?? "");
-  const [estadoCivil, setEstadoCivil] = useState(person?.estadoCivil ?? "");
-  const [perfil, setPerfil] = useState<Person["perfil"]>(person?.perfil ?? "VISITANTE");
-  const [ativo, setAtivo] = useState(person?.ativo ?? true);
+  const [nome, setNome] = useState(person.nome ?? "");
+  const [telefone, setTelefone] = useState(person.telefone ?? "");
+  const [endereco, setEndereco] = useState(person.endereco ?? "");
+  const [dataNascimento, setDataNascimento] = useState(person.dataNascimento ?? "");
+  const [estadoCivil, setEstadoCivil] = useState(person.estadoCivil ?? "");
+  const [familiaId, setFamiliaId] = useState(person.familiaId ?? "");
+  const [pequenoGrupoId, setPequenoGrupoId] = useState(person.pequenoGrupoId ?? "");
+  const [salaEbdId, setSalaEbdId] = useState(person.salaEbdId ?? "");
+  const [ministerios, setMinisterios] = useState((person.ministerios ?? []).join(", "));
+  const [membroDesde, setMembroDesde] = useState(timestampInput(person.membroDesde));
+  const [perfil, setPerfil] = useState<Person["perfil"]>(person.perfil);
+  const [ativo, setAtivo] = useState(person.ativo);
+  const [funcoes, setFuncoes] = useState<UserFunction[]>(person.funcoes ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const mayChangeFunctions = canManageAccess && person.uid !== actorUid;
+
+  function toggleFunction(functionName: UserFunction) {
+    setFuncoes((current) =>
+      current.includes(functionName)
+        ? current.filter((value) => value !== functionName)
+        : [...current, functionName],
+    );
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1163,7 +1445,21 @@ function PersonForm({
     setSaving(true);
     setError("");
     try {
-      await onSave({ nome, email, telefone, endereco, dataNascimento, estadoCivil, perfil, ativo });
+      await onSave({
+        nome: nome.trim(),
+        telefone: telefone.trim(),
+        endereco: endereco.trim(),
+        dataNascimento,
+        estadoCivil,
+        familiaId: familiaId || null,
+        pequenoGrupoId: pequenoGrupoId || null,
+        salaEbdId: salaEbdId || null,
+        ministerios: ministerios.split(",").map((value) => value.trim()).filter(Boolean),
+        membroDesde,
+        perfil: canManageAccess ? perfil : person.perfil,
+        ativo: canManageAccess ? ativo : person.ativo,
+        funcoes: mayChangeFunctions ? funcoes : person.funcoes ?? [],
+      });
     } catch (saveError) {
       console.error("Falha ao salvar cadastro:", saveError);
       const code =
@@ -1174,15 +1470,11 @@ function PersonForm({
           ? saveError.code
           : "";
       setError(
-        code === "auth/email-already-in-use"
-          ? "Já existe uma conta cadastrada com este e-mail."
-          : code === "auth/invalid-email"
-            ? "Informe um e-mail válido."
-            : code === "auth/operation-not-allowed"
-              ? "O acesso por e-mail e senha não está habilitado no Firebase."
-              : saveError instanceof Error
-                ? saveError.message
-                : "Não foi possível salvar o cadastro.",
+        saveError instanceof Error
+          ? saveError.message
+          : code
+            ? `Não foi possível salvar o cadastro (${code}).`
+            : "Não foi possível salvar o cadastro.",
       );
     } finally {
       setSaving(false);
@@ -1191,23 +1483,38 @@ function PersonForm({
 
   return (
     <form className="portal-form" onSubmit={submit}>
-      <ModalHeading eyebrow={person ? "CADASTRO INDIVIDUAL" : "NOVO CADASTRO"} title={person ? "Editar pessoa" : "Cadastrar pessoa"} description={person ? "Atualize os dados e a situação deste cadastro." : "Será criada uma conta de visitante e enviado um e-mail para definir a senha."} />
+      <ModalHeading eyebrow="CADASTRO INDIVIDUAL" title="Editar pessoa" description="Atualize os dados cadastrais permitidos para este perfil." />
       <div className="form-grid">
         <label className="field field-span"><span>Nome completo</span><input value={nome} onChange={(event) => setNome(event.target.value)} maxLength={120} required /></label>
-        <label className="field"><span>E-mail</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={Boolean(person)} required /></label>
+        <label className="field"><span>E-mail</span><input type="email" value={person.email} disabled /></label>
         <label className="field"><span>Telefone</span><input value={telefone} onChange={(event) => setTelefone(event.target.value)} maxLength={40} /></label>
-        {person ? (
+        <label className="field"><span>Data de nascimento</span><input type="date" value={dataNascimento} onChange={(event) => setDataNascimento(event.target.value)} /></label>
+        <label className="field"><span>Estado civil</span><select value={estadoCivil} onChange={(event) => setEstadoCivil(event.target.value)}><option value="">Não informado</option><option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option></select></label>
+        <label className="field field-span"><span>Endereço</span><input value={endereco} onChange={(event) => setEndereco(event.target.value)} maxLength={240} /></label>
+        <label className="field"><span>Família</span><select value={familiaId} onChange={(event) => setFamiliaId(event.target.value)}><option value="">Sem vínculo</option>{families.map((family) => <option value={family.id} key={family.id}>{family.nome}</option>)}</select></label>
+        <label className="field"><span>Pequeno grupo (ID)</span><input value={pequenoGrupoId} onChange={(event) => setPequenoGrupoId(event.target.value)} maxLength={128} /></label>
+        <label className="field"><span>Sala EBD (ID)</span><input value={salaEbdId} onChange={(event) => setSalaEbdId(event.target.value)} maxLength={128} /></label>
+        <label className="field"><span>Ministérios</span><input value={ministerios} onChange={(event) => setMinisterios(event.target.value)} placeholder="Separados por vírgula" /></label>
+        <label className="field"><span>Membro desde</span><input type="date" value={membroDesde} onChange={(event) => setMembroDesde(event.target.value)} /></label>
+        {canManageAccess ? (
           <>
-            <label className="field"><span>Data de nascimento</span><input type="date" value={dataNascimento} onChange={(event) => setDataNascimento(event.target.value)} /></label>
-            <label className="field"><span>Estado civil</span><select value={estadoCivil} onChange={(event) => setEstadoCivil(event.target.value)}><option value="">Não informado</option><option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option></select></label>
-            <label className="field field-span"><span>Endereço</span><input value={endereco} onChange={(event) => setEndereco(event.target.value)} maxLength={240} /></label>
             <label className="field"><span>Perfil</span><select value={perfil} onChange={(event) => setPerfil(event.target.value as Person["perfil"])}><option value="VISITANTE">Visitante</option><option value="MEMBRO">Membro</option><option value="ADMINISTRADOR">Administrador</option></select></label>
             <label className="field-check"><input type="checkbox" checked={ativo} onChange={(event) => setAtivo(event.target.checked)} /><span>Cadastro ativo</span></label>
+            <fieldset className="field field-span access-functions" disabled={!mayChangeFunctions}>
+              <legend>Funções de acesso</legend>
+              {(["SECRETARIA", "PASTORAL", "TESOURARIA"] as const).map((functionName) => (
+                <label className="field-check" key={functionName}>
+                  <input type="checkbox" checked={funcoes.includes(functionName)} onChange={() => toggleFunction(functionName)} />
+                  <span>{functionName === "SECRETARIA" ? "Secretaria" : functionName === "PASTORAL" ? "Pastoral" : "Tesouraria"}</span>
+                </label>
+              ))}
+              {!mayChangeFunctions ? <small>Não é permitido alterar as próprias funções.</small> : null}
+            </fieldset>
           </>
         ) : null}
       </div>
       {error ? <p className="form-error">{error}</p> : null}
-      <ModalActions onCancel={onCancel} saving={saving} submitLabel={person ? "Salvar alterações" : "Cadastrar pessoa"} />
+      <ModalActions onCancel={onCancel} saving={saving} submitLabel="Salvar alterações" />
     </form>
   );
 }
@@ -1276,18 +1583,20 @@ function FamilyForm({
 function HistoryForm({
   data,
   profile,
+  history,
   onCancel,
   onSave,
 }: {
   data: PortalData;
   profile: Person;
+  history: MemberHistory | null;
   onCancel: () => void;
   onSave: (value: Omit<MemberHistory, "id">) => Promise<void>;
 }) {
-  const [pessoaUid, setPessoaUid] = useState("");
-  const [tipo, setTipo] = useState<HistoryKind>("observacao");
-  const [date, setDate] = useState(todayInput());
-  const [descricao, setDescricao] = useState("");
+  const [pessoaUid, setPessoaUid] = useState(history?.pessoaUid ?? "");
+  const [tipo, setTipo] = useState<HistoryKind>(history?.tipo ?? "observacao");
+  const [date, setDate] = useState(history?.data ?? todayInput());
+  const [descricao, setDescricao] = useState(history?.descricao ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -1308,15 +1617,15 @@ function HistoryForm({
 
   return (
     <form className="portal-form" onSubmit={submit}>
-      <ModalHeading eyebrow="HISTÓRICO" title="Novo registro" description="Registre um marco importante da caminhada da pessoa." />
-      <label className="field"><span>Pessoa</span><select value={pessoaUid} onChange={(event) => setPessoaUid(event.target.value)} required><option value="">Selecione</option>{data.pessoas.map((person) => <option value={person.uid} key={person.uid}>{person.nome}</option>)}</select></label>
+      <ModalHeading eyebrow="HISTÓRICO" title={history ? "Editar registro" : "Novo registro"} description={history ? "Atualize o tipo, a data ou a descrição. O registro não pode ser excluído." : "Registre um marco importante da caminhada da pessoa."} />
+      <label className="field"><span>Pessoa</span><select value={pessoaUid} onChange={(event) => setPessoaUid(event.target.value)} required disabled={Boolean(history)}><option value="">Selecione</option>{data.pessoas.map((person) => <option value={person.uid} key={person.uid}>{person.nome}</option>)}</select></label>
       <div className="form-grid">
         <label className="field"><span>Tipo</span><select value={tipo} onChange={(event) => setTipo(event.target.value as HistoryKind)}><option value="admissao">Admissão</option><option value="batismo">Batismo</option><option value="transferencia">Transferência</option><option value="observacao">Observação</option></select></label>
         <label className="field"><span>Data</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
       </div>
       <label className="field"><span>Observações</span><textarea value={descricao} onChange={(event) => setDescricao(event.target.value)} maxLength={2000} rows={4} required /></label>
       {error ? <p className="form-error">{error}</p> : null}
-      <ModalActions onCancel={onCancel} saving={saving} submitLabel="Adicionar ao histórico" />
+      <ModalActions onCancel={onCancel} saving={saving} submitLabel={history ? "Salvar alterações" : "Adicionar ao histórico"} />
     </form>
   );
 }

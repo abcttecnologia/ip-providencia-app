@@ -38,12 +38,17 @@ async function requireAdministrator() {
 }
 
 export async function createUser(
-  user: Pick<AppUser, "uid" | "email" | "nome">,
+  user: Pick<AppUser, "uid" | "email" | "nome"> & {
+    consentimentoAceito: boolean;
+  },
 ) {
   const userRef = doc(db, "users", user.uid);
   const snapshot = await getDoc(userRef);
 
   if (snapshot.exists()) return;
+  if (!user.consentimentoAceito) {
+    throw new Error("É necessário aceitar a Política de Privacidade.");
+  }
 
   await setDoc(userRef, {
     uid: user.uid,
@@ -52,6 +57,10 @@ export async function createUser(
     perfil: "VISITANTE",
     ativo: true,
     ministerios: [],
+    consentimentoLgpd: {
+      versao: "1.0",
+      aceitoEm: serverTimestamp(),
+    },
     criadoEm: serverTimestamp(),
     atualizadoEm: serverTimestamp(),
   });
@@ -61,6 +70,7 @@ export async function ensureUserProfile(
   uid: string,
   email: string | null,
   nome?: string,
+  consentimentoAceito = false,
 ) {
   const emailUsuario = email ?? "";
 
@@ -69,11 +79,40 @@ export async function ensureUserProfile(
       uid,
       email: emailUsuario,
       nome: nome || emailUsuario.split("@")[0] || "Visitante",
+      consentimentoAceito,
     });
   } catch (error) {
     console.error("Falha ao verificar ou criar perfil no Firestore:", error);
     throw error;
   }
+}
+
+export async function aceitarConsentimentoLgpd() {
+  const firebaseUser = auth.currentUser;
+  if (!firebaseUser) {
+    throw new Error("Entre na sua conta para aceitar a Política de Privacidade.");
+  }
+
+  const userRef = doc(db, "users", firebaseUser.uid);
+  const snapshot = await getDoc(userRef);
+  const consentimentoLgpd = {
+    versao: "1.0" as const,
+    aceitoEm: serverTimestamp(),
+  };
+
+  if (snapshot.exists()) {
+    if (snapshot.data().consentimentoLgpd?.versao === "1.0") return;
+    await updateDoc(userRef, { consentimentoLgpd });
+    return;
+  }
+
+  const email = firebaseUser.email ?? "";
+  await createUser({
+    uid: firebaseUser.uid,
+    email,
+    nome: firebaseUser.displayName || email.split("@")[0] || "Visitante",
+    consentimentoAceito: true,
+  });
 }
 
 export async function getUser(uid: string) {

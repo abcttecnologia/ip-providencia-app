@@ -4,6 +4,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -52,6 +53,7 @@ export default function CadastroScreen() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
+  const [aceitouPolitica, setAceitouPolitica] = useState(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const cadastroEmAndamento = useRef(false);
@@ -81,13 +83,18 @@ export default function CadastroScreen() {
       return;
     }
 
+    if (!aceitouPolitica) {
+      setErro('Leia e aceite a Política de Privacidade para criar sua conta.');
+      return;
+    }
+
     cadastroEmAndamento.current = true;
     setLoading(true);
     setErro('');
 
     try {
       const nomeInicial = emailNormalizado.split('@')[0] || emailNormalizado;
-      await register(nomeInicial, emailNormalizado, senha);
+      await register(nomeInicial, emailNormalizado, senha, aceitouPolitica);
       router.replace('/(tabs)');
     } catch (error) {
       setErro(getRegistrationErrorMessage(error));
@@ -169,6 +176,38 @@ export default function CadastroScreen() {
               editable={!loading}
               accessibilityLabel="Confirmar senha"
             />
+
+            <View style={styles.consentRow}>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: aceitouPolitica }}
+                onPress={() => {
+                  setAceitouPolitica((accepted) => !accepted);
+                  setErro('');
+                }}
+                style={styles.consentCheck}
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+                    aceitouPolitica ? styles.checkboxChecked : null,
+                  ]}
+                >
+                  {aceitouPolitica ? (
+                    <Text style={styles.checkboxMark}>✓</Text>
+                  ) : null}
+                </View>
+                <Text style={styles.consentText}>
+                  Li e concordo com a
+                </Text>
+              </Pressable>
+              <TouchableOpacity
+                onPress={() => router.push('/politica')}
+                accessibilityRole="link"
+              >
+                <Text style={styles.link}>Política de Privacidade</Text>
+              </TouchableOpacity>
+            </View>
 
             <FormError message={erro} />
 
@@ -260,5 +299,40 @@ const styles = StyleSheet.create({
     color: Theme.colors.primary,
     fontSize: Theme.typography.small,
     fontWeight: '600',
+  },
+  consentRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginBottom: Theme.spacing.md,
+  },
+  consentCheck: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: Theme.colors.textSecondary,
+    borderRadius: 4,
+  },
+  checkboxChecked: {
+    borderColor: Theme.colors.primary,
+    backgroundColor: Theme.colors.primary,
+  },
+  checkboxMark: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  consentText: {
+    color: Theme.colors.textSecondary,
+    fontSize: Theme.typography.small,
   },
 });

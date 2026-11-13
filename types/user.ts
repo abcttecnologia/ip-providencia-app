@@ -1,6 +1,12 @@
 import type { DataFirestore } from "./firestore";
 
 export type UserProfile = "VISITANTE" | "MEMBRO" | "ADMINISTRADOR";
+export type UserFunction = "SECRETARIA" | "PASTORAL" | "TESOURARIA";
+
+export interface LgpdConsent {
+  versao: "1.0";
+  aceitoEm: DataFirestore;
+}
 
 export interface AppUser {
   uid: string;
@@ -14,7 +20,9 @@ export interface AppUser {
   estadoCivil?: string;
   membroDesde?: DataFirestore;
   perfil: UserProfile;
+  funcoes?: UserFunction[];
   ativo: boolean;
+  consentimentoLgpd?: LgpdConsent;
   familiaId?: string | null;
   pequenoGrupoId?: string | null;
   salaEbdId?: string | null;

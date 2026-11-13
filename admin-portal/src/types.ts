@@ -1,6 +1,7 @@
 import type { Timestamp } from "firebase/firestore";
 
 export type UserProfile = "VISITANTE" | "MEMBRO" | "ADMINISTRADOR";
+export type UserFunction = "SECRETARIA" | "PASTORAL" | "TESOURARIA";
 export type RecordTarget = "pessoa" | "familia";
 export type HistoryKind = "admissao" | "batismo" | "transferencia" | "observacao";
 export type VisitStatus = "agendada" | "realizada" | "cancelada";
@@ -16,8 +17,11 @@ export interface Person {
   dataNascimento?: string;
   estadoCivil?: string;
   perfil: UserProfile;
+  funcoes?: UserFunction[];
   ativo: boolean;
   familiaId?: string | null;
+  pequenoGrupoId?: string | null;
+  salaEbdId?: string | null;
   ministerios?: string[];
   criadoEm?: Timestamp;
   membroDesde?: Timestamp | string;
@@ -67,10 +71,22 @@ export interface FollowUp {
   atualizadoEm?: Timestamp;
 }
 
+export interface DeletionRequest {
+  uid: string;
+  nome: string;
+  email: string;
+  status: "pendente" | "concluida";
+  criadoEm: Timestamp;
+  motivoExclusao: "lgpd";
+  anonimizacaoAdminOk: boolean;
+  anonimizacaoPastoralOk: boolean;
+}
+
 export interface PortalData {
   pessoas: Person[];
   familias: Family[];
   historico: MemberHistory[];
   visitas: PastoralVisit[];
   acompanhamentos: FollowUp[];
+  solicitacoesExclusao: DeletionRequest[];
 }

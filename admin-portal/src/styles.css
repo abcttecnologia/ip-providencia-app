@@ -239,7 +239,7 @@ tbody tr:hover { background: #fcfdfc; }
 .profile-administrador { color: #775c99; background: #f1ebf7; }
 .status-ativo, .status-realizada, .status-concluido { color: #3c7955; background: #eaf4ed; }
 .status-inativo, .status-cancelada { color: #8c9390; background: #eff1ef; }
-.status-agendada, .status-aberto { color: #a76e30; background: #fbf1e4; }
+.status-agendada, .status-aberto, .status-pendente { color: #a76e30; background: #fbf1e4; }
 .status-em_andamento { color: #48779a; background: #eaf2f8; }
 .wrap-cell { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
 .inline-stat { display: inline-flex; align-items: center; gap: 6px; color: #5c7d69; font-size: 9px; }
@@ -258,6 +258,7 @@ tbody tr:hover { background: #fcfdfc; }
 
 .history-list { padding: 0 18px 16px; }
 .history-row { position: relative; display: grid; grid-template-columns: 90px 1fr; gap: 10px; padding: 15px 0 15px 16px; border-top: 1px solid #eff2ef; }
+.history-row > .button { align-self: start; justify-self: end; }
 .history-row::before { position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: #e0e8e2; content: ""; }
 .timeline-dot { position: absolute; top: 19px; left: -1px; width: 9px; height: 9px; border: 2px solid #fff; border-radius: 50%; background: #54936e; box-shadow: 0 0 0 1px #8db59a; }
 .history-date { padding-top: 3px; color: #8b9790; font-size: 9px; }
@@ -315,6 +316,11 @@ tbody tr:hover { background: #fcfdfc; }
 .field input:disabled { color: #8e9992; background: #f5f7f5; }
 .field-check { display: flex; align-items: center; gap: 8px; align-self: end; min-height: 36px; color: #63736a; font-size: 10px; }
 .field-check input, .member-option input { accent-color: #397455; }
+.access-functions { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 0; padding: 10px; border: 1px solid #e0e8e2; border-radius: 7px; }
+.access-functions legend { padding: 0 5px; }
+.access-functions .field-check { min-height: 24px; }
+.access-functions small { flex-basis: 100%; color: #9aa49e; font-size: 9px; font-weight: 400; }
+.table-action-group { display: flex; flex-wrap: wrap; gap: 6px; min-width: 190px; }
 .form-error { margin: 0; color: #b44843; font-size: 10px; line-height: 1.5; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
 .member-picker-heading { display: flex; align-items: center; justify-content: space-between; color: #53665b; font-size: 10px; }
