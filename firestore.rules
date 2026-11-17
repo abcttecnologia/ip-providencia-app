@@ -35,6 +35,14 @@ service cloud.firestore {
       return hasFuncao('SECRETARIA');
     }
 
+    function isRecepcao() {
+      return hasUserProfile()
+        && currentUser().ministerios is list
+        && get(/databases/$(database)/documents/config/app).data.recepcaoMinisterioId
+          == 'acolhimento'
+        && currentUser().ministerios.hasAny(['acolhimento']);
+    }
+
     function isPastoral() {
       return hasFuncao('PASTORAL');
     }
@@ -738,8 +746,11 @@ service cloud.firestore {
 
 
     match /users/{uid} {
-      allow get: if (signedIn() && request.auth.uid == uid) || isMemberViewer();
-      allow list: if isMemberViewer();
+      allow get: if (signedIn() && request.auth.uid == uid)
+        || isMemberViewer()
+        || (isRecepcao() && resource.data.perfil == 'VISITANTE');
+      allow list: if isMemberViewer()
+        || (isRecepcao() && resource.data.perfil == 'VISITANTE');
       allow create: if signedIn()
         && request.auth.uid == uid
         && !exists(deletionRequestPath(uid))
@@ -818,6 +829,17 @@ service cloud.firestore {
           ])
           && request.resource.data.atualizadoEm == request.time
           && validProfileUpdate(request.resource.data)
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'ministerios'
+          ])
+          || (
+            request.resource.data.ministerios.hasAny(['conselho'])
+              == resource.data.ministerios.hasAny(['conselho'])
+            && request.resource.data.ministerios.hasAny(['junta-diaconal'])
+              == resource.data.ministerios.hasAny(['junta-diaconal'])
+          )
+        )
         )
         || (
           isAdmin()
@@ -826,10 +848,15 @@ service cloud.firestore {
             'perfil',
             'ativo',
             'funcoes',
+            'ministerios',
             'atualizadoEm'
           ])
           && request.resource.data.atualizadoEm == request.time
           && validProfileUpdate(request.resource.data)
+          && (
+            !request.resource.data.keys().hasAny(['ministerios'])
+            || request.resource.data.ministerios is list
+          )
         )
         || (
           isAdmin()
@@ -878,14 +905,45 @@ service cloud.firestore {
     }
 
     match /ministerios/{ministerioId} {
-      allow get: if isAdmin()
-        || (
-          isMember()
-          && currentUser().ministerios is list
-          && currentUser().ministerios.hasAny([ministerioId])
-        );
-      allow list: if isAdmin();
-      allow create, update, delete: if isAdmin();
+      allow get, list: if signedIn();
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /solicitacoesMinisterio/{solicitacaoId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll([
+          'uid',
+          'ministerioId',
+          'status',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'ministerioId',
+          'status',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.ministerioId is string
+        && request.resource.data.ministerioId != 'conselho'
+        && request.resource.data.ministerioId != 'junta-diaconal'
+        && request.resource.data.status == 'pendente'
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow get: if signedIn() && resource.data.uid == request.auth.uid;
+      allow list: if isAdmin() || isSecretaria();
+      allow update: if (isAdmin() || isSecretaria())
+        && resource.data.status == 'pendente'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'atualizadoEm'
+        ])
+        && request.resource.data.status in ['aprovada', 'recusada']
+        && request.resource.data.atualizadoEm == request.time;
+      allow delete: if false;
     }
 
     match /pequenosGrupos/{grupoId} {

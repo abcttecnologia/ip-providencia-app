@@ -79,7 +79,18 @@ export interface Ministerio {
   id: string;
   nome: string;
   descricao?: string;
+  tipo: 'orgao' | 'sociedade' | 'ministerio';
+  ordem: number;
   ativo: boolean;
+  criadoEm?: DataFirestore;
+  atualizadoEm?: DataFirestore;
+}
+
+export interface SolicitacaoMinisterio {
+  id: string;
+  uid: string;
+  ministerioId: string;
+  status: 'pendente' | 'aprovada' | 'recusada';
   criadoEm?: DataFirestore;
   atualizadoEm?: DataFirestore;
 }

@@ -41,12 +41,14 @@ import {
   respondToPgInformationRequest,
   saveFamily,
   saveFollowUp,
+  saveMinistry,
   saveSmallGroup,
   saveSmallGroupLeaders,
   saveVisit,
   signOutPortal,
   updatePrayerRequestStatus,
   updatePgRequest,
+  updateMinistryRequest,
   updatePerson,
 } from "./data";
 import type { PortalActor } from "./data";
@@ -58,6 +60,8 @@ import type {
   FollowUpStatus,
   HistoryKind,
   MemberHistory,
+  Ministry,
+  MinistryRequest,
   PastoralVisit,
   Person,
   PortalData,
@@ -82,7 +86,9 @@ type PageKey =
   | "historico"
   | "relatorios"
   | "solicitacoes"
-  | "tesouraria";
+  | "tesouraria"
+  | "departamentos"
+  | "solicitacoesMinisterio";
 type ModalState =
   | { kind: "person"; person: Person }
   | { kind: "family"; family: Family | null }
@@ -105,6 +111,8 @@ const navigation: { key: PageKey; label: string; icon: typeof LayoutDashboard }[
   { key: "historico", label: "Histórico", icon: FileClock },
   { key: "relatorios", label: "Relatórios", icon: ClipboardList },
   { key: "solicitacoes", label: "Solicitações de exclusão", icon: Trash2 },
+  { key: "departamentos", label: "Departamentos", icon: ClipboardList },
+  { key: "solicitacoesMinisterio", label: "Pedidos de ministério", icon: UserPlus },
   { key: "tesouraria", label: "Tesouraria", icon: Wallet },
 ];
 
@@ -120,6 +128,8 @@ const pageTitles: Record<PageKey, { title: string; eyebrow: string }> = {
   historico: { title: "Histórico", eyebrow: "REGISTROS DA IGREJA" },
   relatorios: { title: "Relatórios", eyebrow: "MONITORAMENTO" },
   solicitacoes: { title: "Solicitações de exclusão", eyebrow: "PRIVACIDADE E LGPD" },
+  departamentos: { title: "Departamentos", eyebrow: "MINISTÉRIOS E SOCIEDADES" },
+  solicitacoesMinisterio: { title: "Pedidos de ministério", eyebrow: "VÍNCULOS DE SERVIÇO" },
   tesouraria: { title: "Tesouraria", eyebrow: "GESTÃO FINANCEIRA" },
 };
 
@@ -482,6 +492,7 @@ function AdminPortal({
   const isAdministrator = isAdmin(profile);
   const canManagePg =
     isAdministrator || hasFunction(profile, "SECRETARIA");
+  const canManageMinistries = isAdministrator || hasFunction(profile, "SECRETARIA");
   const [page, setPage] = useState<PageKey>(
     canViewMembers ? "dashboard" : "tesouraria",
   );
@@ -502,6 +513,7 @@ function AdminPortal({
           ? await loadPortalData({
               pastoral: canViewPastoral,
               exclusionRequests: canReadDeletionRequests,
+              ministryRequests: canManageMinistries,
               membersOnly: !canCare,
             })
           : {
@@ -516,6 +528,8 @@ function AdminPortal({
               presencasPg: [],
               participantesPg: [],
               solicitacoesExclusao: [],
+              ministerios: [],
+              solicitacoesMinisterio: [],
             };
         setData(result);
         const currentProfile = result.pessoas.find(
@@ -541,7 +555,11 @@ function AdminPortal({
       canReadDeletionRequests,
       canViewMembers,
       canViewPastoral,
+      canManageMinistries,
       onProfileUpdate,
+      profile.ativo,
+      profile.funcoes,
+      profile.perfil,
       profile.uid,
     ],
   );
@@ -559,6 +577,8 @@ function AdminPortal({
     if (key === "solicitacoesPg") return canManagePg;
     if (key === "pequenosGrupos") return canCare;
     if (key === "solicitacoes") return canReadDeletionRequests;
+    if (key === "departamentos") return isAdministrator;
+    if (key === "solicitacoesMinisterio") return canManageMinistries;
     return canCare;
   });
   const roleDescription = isAdministrator
@@ -583,6 +603,8 @@ function AdminPortal({
       (page === "solicitacoesPg" && canManagePg) ||
       (page === "pequenosGrupos" && canCare) ||
       (page === "solicitacoes" && canReadDeletionRequests) ||
+      (page === "departamentos" && isAdministrator) ||
+      (page === "solicitacoesMinisterio" && canManageMinistries) ||
       (page !== "tesouraria" &&
       page !== "dashboard" &&
       page !== "pessoas" &&
@@ -591,6 +613,8 @@ function AdminPortal({
         page !== "pequenosGrupos" &&
         page !== "solicitacoesPg" &&
         page !== "solicitacoes" &&
+        page !== "departamentos" &&
+        page !== "solicitacoesMinisterio" &&
         canCare);
     if (!pageIsAllowed) {
       setPage(canViewMembers ? "dashboard" : "tesouraria");
@@ -603,6 +627,8 @@ function AdminPortal({
     canManagePg,
     canReadDeletionRequests,
     canViewPastoral,
+    canManageMinistries,
+    isAdministrator,
   ]);
 
   async function runAction(action: () => Promise<void>, successMessage: string) {
@@ -752,6 +778,7 @@ function AdminPortal({
               search={query}
               canManageAccess={isAdministrator}
               canEditData={canEditMembers}
+              ministries={data.ministerios}
               onEdit={(person) => setModal({ kind: "person", person })}
             />
           ) : null}
@@ -878,6 +905,32 @@ function AdminPortal({
               }
             />
           ) : null}
+          {page === "departamentos" ? (
+            <MinistriesPage
+              ministries={data.ministerios}
+              onSave={(ministry, id) =>
+                runAction(
+                  () => saveMinistry(ministry, id, portalActor(profile)),
+                  id ? "Departamento atualizado." : "Departamento criado.",
+                )
+              }
+            />
+          ) : null}
+          {page === "solicitacoesMinisterio" ? (
+            <MinistryRequestsPage
+              requests={data.solicitacoesMinisterio}
+              ministries={data.ministerios}
+              people={data.pessoas}
+              onUpdate={(request, status) =>
+                runActionSafely(
+                  () => updateMinistryRequest(request, status, portalActor(profile)),
+                  status === "aprovada"
+                    ? "Vínculo de ministério aprovado."
+                    : "Solicitação recusada.",
+                )
+              }
+            />
+          ) : null}
           {page === "tesouraria" ? <TreasuryPage /> : null}
           <footer className="page-footer"><span>IP Providência · Portal de gestão</span><span>Dados protegidos por perfil de acesso</span></footer>
         </section>
@@ -891,6 +944,7 @@ function AdminPortal({
               actorUid={profile.uid}
               canManageAccess={isAdministrator}
               canEditData={canEditMembers}
+              ministries={data.ministerios}
               families={data.familias}
               onCancel={() => setModal(null)}
               onSave={(person) =>
@@ -1019,6 +1073,8 @@ function pageDescription(page: PageKey) {
     historico: "Consulte registros importantes da caminhada de cada pessoa.",
     relatorios: "Indicadores de cuidado e pendências da comunidade.",
     solicitacoes: "Anonimize os registros após solicitação do titular.",
+    departamentos: "Gerencie as opções de órgãos, sociedades e ministérios.",
+    solicitacoesMinisterio: "Aprove ou recuse pedidos de participação.",
     tesouraria: "Área reservada para gestão financeira.",
   };
   return descriptions[page];
@@ -1328,19 +1384,27 @@ function PeoplePage({
   search,
   canManageAccess,
   canEditData,
+  ministries,
   onEdit,
 }: {
   data: PortalData;
   search: string;
   canManageAccess: boolean;
   canEditData: boolean;
+  ministries: Ministry[];
   onEdit: (person: Person) => void;
 }) {
   const [filter, setFilter] = useState("todos");
   const filtered = data.pessoas.filter((person) => {
     const text = `${person.nome ?? ""} ${person.email ?? ""} ${person.telefone ?? ""}`.toLocaleLowerCase("pt-BR");
     const matchesText = text.includes(search.toLocaleLowerCase("pt-BR"));
-    const matchesFilter = filter === "todos" || (filter === "ativos" ? person.ativo === true : person.perfil === filter);
+    const matchesFilter =
+      filter === "todos" ||
+      (filter === "ativos"
+        ? person.ativo === true
+        : ["MEMBRO", "VISITANTE"].includes(filter)
+          ? person.perfil === filter
+          : person.ministerios?.includes(filter) === true);
     return matchesText && matchesFilter;
   });
 
@@ -1356,6 +1420,9 @@ function PeoplePage({
             ["VISITANTE", "Visitantes"],
           ].map(([value, label]) => (
             <button key={value} className={filter === value ? "filter-active" : ""} onClick={() => setFilter(value)}>{label}</button>
+          ))}
+          {ministries.map((ministry) => (
+            <button key={ministry.id} className={filter === ministry.id ? "filter-active" : ""} onClick={() => setFilter(ministry.id)}>{ministry.nome}</button>
           ))}
         </div>
       </div>
@@ -2305,6 +2372,7 @@ function PersonForm({
   actorUid,
   canManageAccess,
   canEditData,
+  ministries,
   families,
   onCancel,
   onSave,
@@ -2313,6 +2381,7 @@ function PersonForm({
   actorUid: string;
   canManageAccess: boolean;
   canEditData: boolean;
+  ministries: Ministry[];
   families: Family[];
   onCancel: () => void;
   onSave: (value: Pick<Person, "nome" | "telefone" | "endereco" | "dataNascimento" | "estadoCivil" | "familiaId" | "pequenoGrupoId" | "salaEbdId" | "ministerios" | "perfil" | "ativo" | "funcoes"> & { membroDesde: string }) => Promise<void>;
@@ -2325,7 +2394,7 @@ function PersonForm({
   const [familiaId, setFamiliaId] = useState(person.familiaId ?? "");
   const [pequenoGrupoId, setPequenoGrupoId] = useState(person.pequenoGrupoId ?? "");
   const [salaEbdId, setSalaEbdId] = useState(person.salaEbdId ?? "");
-  const [ministerios, setMinisterios] = useState((person.ministerios ?? []).join(", "));
+  const [ministerios, setMinisterios] = useState(person.ministerios ?? []);
   const [membroDesde, setMembroDesde] = useState(timestampInput(person.membroDesde));
   const [perfil, setPerfil] = useState<Person["perfil"]>(person.perfil);
   const [ativo, setAtivo] = useState(person.ativo);
@@ -2357,7 +2426,7 @@ function PersonForm({
         familiaId: familiaId || null,
         pequenoGrupoId: pequenoGrupoId || null,
         salaEbdId: salaEbdId || null,
-        ministerios: ministerios.split(",").map((value) => value.trim()).filter(Boolean),
+        ministerios,
         membroDesde,
         perfil: canManageAccess ? perfil : person.perfil,
         ativo: canManageAccess ? ativo : person.ativo,
@@ -2398,9 +2467,40 @@ function PersonForm({
         <label className="field"><span>Família</span><select value={familiaId} onChange={(event) => setFamiliaId(event.target.value)}><option value="">Sem vínculo</option>{families.map((family) => <option value={family.id} key={family.id}>{family.nome}</option>)}</select></label>
         <label className="field"><span>Pequeno grupo (ID)</span><input value={pequenoGrupoId} onChange={(event) => setPequenoGrupoId(event.target.value)} maxLength={128} /></label>
         <label className="field"><span>Sala EBD (ID)</span><input value={salaEbdId} onChange={(event) => setSalaEbdId(event.target.value)} maxLength={128} /></label>
-        <label className="field"><span>Ministérios</span><input value={ministerios} onChange={(event) => setMinisterios(event.target.value)} placeholder="Separados por vírgula" /></label>
         <label className="field"><span>Membro desde</span><input type="date" value={membroDesde} onChange={(event) => setMembroDesde(event.target.value)} /></label>
         </fieldset>
+        {canEditData || canManageAccess ? (
+          <fieldset className="field field-span access-functions">
+            <legend>Departamentos e ministérios</legend>
+            {(["orgao", "sociedade", "ministerio"] as const).map((type) => (
+              <div className="ministry-group" key={type}>
+                <strong>{type === "orgao" ? "Órgãos" : type === "sociedade" ? "Sociedades internas" : "Ministérios"}</strong>
+                <div className="chip-list">
+                  {ministries.filter((ministry) => ministry.tipo === type).map((ministry) => {
+                    const locked = type === "orgao" && !canManageAccess;
+                    return (
+                      <label className={`chip-checkbox ${locked ? "chip-checkbox-locked" : ""}`} key={ministry.id}>
+                        <input
+                          type="checkbox"
+                          checked={ministerios.includes(ministry.id)}
+                          disabled={locked}
+                          onChange={() =>
+                            setMinisterios((current) =>
+                              current.includes(ministry.id)
+                                ? current.filter((id) => id !== ministry.id)
+                                : [...current, ministry.id],
+                            )
+                          }
+                        />
+                        <span>{ministry.nome}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </fieldset>
+        ) : null}
         {canManageAccess ? (
           <>
             <label className="field"><span>Perfil</span><select value={perfil} onChange={(event) => setPerfil(event.target.value as Person["perfil"])}><option value="VISITANTE">Visitante</option><option value="MEMBRO">Membro</option><option value="ADMINISTRADOR">Administrador</option></select></label>
@@ -2443,6 +2543,96 @@ function PersonForm({
         </div>
       )}
     </form>
+  );
+}
+
+function MinistriesPage({
+  ministries,
+  onSave,
+}: {
+  ministries: Ministry[];
+  onSave: (ministry: Omit<Ministry, "id">, id: string | null) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState<Ministry | null>(null);
+  const [nome, setNome] = useState("");
+  const [tipo, setTipo] = useState<Ministry["tipo"]>("ministerio");
+  const [ordem, setOrdem] = useState("0");
+  const [ativo, setAtivo] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  function startEditing(ministry: Ministry | null) {
+    setEditing(ministry);
+    setNome(ministry?.nome ?? "");
+    setTipo(ministry?.tipo ?? "ministerio");
+    setOrdem(String(ministry?.ordem ?? ministries.length));
+    setAtivo(ministry?.ativo ?? true);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onSave(
+        { nome, tipo, ordem: Number(ordem), ativo },
+        editing?.id ?? null,
+      );
+      startEditing(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="content-grid">
+      <section className="panel">
+        <div className="panel-heading"><div><span className="eyebrow">CATÁLOGO</span><h2>{editing ? "Editar departamento" : "Novo departamento"}</h2></div></div>
+        <form className="portal-form" onSubmit={(event) => void submit(event)}>
+          <label className="field"><span>Nome</span><input value={nome} onChange={(event) => setNome(event.target.value)} required /></label>
+          <label className="field"><span>Categoria</span><select value={tipo} onChange={(event) => setTipo(event.target.value as Ministry["tipo"])}><option value="orgao">Órgão</option><option value="sociedade">Sociedade interna</option><option value="ministerio">Ministério</option></select></label>
+          <label className="field"><span>Ordem</span><input type="number" min="0" value={ordem} onChange={(event) => setOrdem(event.target.value)} required /></label>
+          <label className="field-check"><input type="checkbox" checked={ativo} onChange={(event) => setAtivo(event.target.checked)} /><span>Ativo</span></label>
+          <div className="modal-actions"><button type="button" className="button button-secondary" onClick={() => startEditing(null)}>Limpar</button><button className="button button-primary" disabled={saving}>{saving ? "Salvando..." : "Salvar"}</button></div>
+        </form>
+      </section>
+      <section className="panel">
+        <div className="panel-heading"><div><span className="eyebrow">OPÇÕES DISPONÍVEIS</span><h2>Departamentos cadastrados</h2></div></div>
+        <div className="stack-list">
+          {[...ministries].sort((left, right) => left.ordem - right.ordem).map((ministry) => (
+            <div className="list-row" key={ministry.id}>
+              <div><strong>{ministry.nome}</strong><small>{ministry.tipo} · ordem {ministry.ordem} · {ministry.ativo ? "ativo" : "inativo"}</small></div>
+              <button className="button button-small button-secondary" onClick={() => startEditing(ministry)}>Editar</button>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MinistryRequestsPage({
+  requests,
+  ministries,
+  people,
+  onUpdate,
+}: {
+  requests: MinistryRequest[];
+  ministries: Ministry[];
+  people: Person[];
+  onUpdate: (request: MinistryRequest, status: "aprovada" | "recusada") => Promise<void>;
+}) {
+  const ministryById = new Map(ministries.map((ministry) => [ministry.id, ministry.nome]));
+  const peopleById = new Map(people.map((person) => [person.uid, person.nome]));
+  const pending = requests.filter((request) => request.status === "pendente");
+  return (
+    <section className="panel">
+      <div className="panel-heading"><div><span className="eyebrow">SOLICITAÇÕES</span><h2>Pedidos pendentes</h2></div><span className="stat-badge">{pending.length}</span></div>
+      {pending.length ? pending.map((request) => (
+        <div className="list-row" key={request.id}>
+          <div><strong>{peopleById.get(request.uid) ?? "Pessoa não encontrada"}</strong><small>{ministryById.get(request.ministerioId) ?? request.ministerioId}</small></div>
+          <div className="row-actions"><button className="button button-small button-primary" onClick={() => void onUpdate(request, "aprovada")}>Aprovar</button><button className="button button-small button-secondary" onClick={() => void onUpdate(request, "recusada")}>Recusar</button></div>
+        </div>
+      )) : <EmptyState icon={<Check size={18} />} text="Nenhum pedido pendente. As novas solicitações aparecerão aqui." />}
+    </section>
   );
 }
 

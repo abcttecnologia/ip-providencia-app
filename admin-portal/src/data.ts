@@ -21,6 +21,8 @@ import type {
   Family,
   FollowUp,
   MemberHistory,
+  Ministry,
+  MinistryRequest,
   PastoralVisit,
   Person,
   PgAttendance,
@@ -94,6 +96,7 @@ export async function loadPortalData(
   options: {
     pastoral: boolean;
     exclusionRequests: boolean;
+    ministryRequests?: boolean;
     membersOnly?: boolean;
   },
 ): Promise<PortalData> {
@@ -110,6 +113,8 @@ export async function loadPortalData(
       presencasPg: [],
       participantesPg: [],
       solicitacoesExclusao: [],
+      ministerios: [],
+      solicitacoesMinisterio: [],
     };
   }
 
@@ -124,6 +129,8 @@ export async function loadPortalData(
     pgRequestRecords,
     attendanceRecords,
     deletionRequestSnapshot,
+    ministryRecords,
+    ministryRequestRecords,
   ] = await Promise.all([
     mapCollection<Person>("users", "uid"),
     mapCollection<Family>("familias", "id"),
@@ -149,6 +156,10 @@ export async function loadPortalData(
           throw error;
         })
       : Promise.resolve(null),
+    mapCollection<Ministry>("ministerios", "id"),
+    options.ministryRequests
+      ? mapCollection<MinistryRequest>("solicitacoesMinisterio", "id")
+      : Promise.resolve([] as MinistryRequest[]),
   ]);
   const historico = historyRecords.map((record) => ({
     ...record,
@@ -258,6 +269,11 @@ export async function loadPortalData(
     presencasPg,
     participantesPg,
     solicitacoesExclusao,
+    ministerios: ministryRecords.filter((ministry) => ministry.ativo),
+    solicitacoesMinisterio: ministryRequestRecords.sort(
+      (left, right) =>
+        (right.criadoEm?.toMillis() ?? 0) - (left.criadoEm?.toMillis() ?? 0),
+    ),
   };
 }
 
@@ -287,6 +303,89 @@ export async function saveSmallGroupLeaders(
     auditRecord("editar", "pequenosGrupos", groupId, actor),
   );
   await batch.commit();
+}
+
+export async function saveMinistry(
+  ministry: Omit<Ministry, "id">,
+  ministryId: string | null,
+  actor: PortalActor,
+) {
+  if (actor.perfil !== "ADMINISTRADOR") {
+    throw new Error("Somente o administrador pode gerenciar departamentos.");
+  }
+  if (!ministry.nome.trim() || ministry.ordem < 0) {
+    throw new Error("Informe um nome e uma ordem válidos.");
+  }
+
+  const ministryRef = ministryId
+    ? doc(db, "ministerios", ministryId)
+    : doc(collection(db, "ministerios"));
+  const batch = writeBatch(db);
+  batch.set(
+    ministryRef,
+    {
+      ...ministry,
+      nome: ministry.nome.trim(),
+      atualizadoEm: serverTimestamp(),
+    },
+    { merge: true },
+  );
+  batch.set(
+    doc(collection(db, "auditoria")),
+    auditRecord(
+      ministryId ? "editar" : "criar",
+      "ministerios",
+      ministryRef.id,
+      actor,
+    ),
+  );
+  await batch.commit();
+}
+
+export async function updateMinistryRequest(
+  request: MinistryRequest,
+  status: "aprovada" | "recusada",
+  actor: PortalActor,
+) {
+  if (actor.perfil !== "ADMINISTRADOR" && !actor.funcoes?.includes("SECRETARIA")) {
+    throw new Error("Somente a administração ou a secretaria pode aprovar pedidos.");
+  }
+  if (request.status !== "pendente") {
+    throw new Error("Esta solicitação já foi atualizada.");
+  }
+
+  const requestRef = doc(db, "solicitacoesMinisterio", request.id);
+  const auditRef = doc(collection(db, "auditoria"));
+  const userRef = doc(db, "users", request.uid);
+  const userAuditRef = doc(collection(db, "auditoria"));
+  await runTransaction(db, async (transaction) => {
+    const requestSnapshot = await transaction.get(requestRef);
+    if (!requestSnapshot.exists() || requestSnapshot.data().status !== "pendente") {
+      throw new Error("Esta solicitação já foi atualizada.");
+    }
+    if (status === "aprovada") {
+      const userSnapshot = await transaction.get(userRef);
+      if (!userSnapshot.exists() || userSnapshot.data().ativo !== true) {
+        throw new Error("O cadastro da pessoa não existe ou está inativo.");
+      }
+      transaction.update(userRef, {
+        ministerios: arrayUnion(request.ministerioId),
+        atualizadoEm: serverTimestamp(),
+      });
+      transaction.set(
+        userAuditRef,
+        auditRecord("editar", "users", request.uid, actor),
+      );
+    }
+    transaction.update(requestRef, {
+      status,
+      atualizadoEm: serverTimestamp(),
+    });
+    transaction.set(
+      auditRef,
+      auditRecord("editar", "solicitacoesMinisterio", request.id, actor),
+    );
+  });
 }
 
 export async function saveSmallGroup(
@@ -583,6 +682,9 @@ export async function updatePerson(
       } else if (changes.membroDesde === "") {
         updates.membroDesde = deleteField();
       }
+    }
+    if (actor.perfil === "ADMINISTRADOR" && uid !== actor.uid) {
+      updates.ministerios = changes.ministerios ?? [];
     }
 
     if (actor.perfil === "ADMINISTRADOR") {

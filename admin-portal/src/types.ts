@@ -13,6 +13,7 @@ export type HistoryKind = "admissao" | "batismo" | "transferencia" | "observacao
 export type VisitStatus = "agendada" | "realizada" | "cancelada";
 export type FollowUpStatus = "aberto" | "em_andamento" | "concluido";
 export type PrayerRequestStatus = "aberto" | "respondido" | "arquivado";
+export type MinistryType = "orgao" | "sociedade" | "ministerio";
 
 export interface Person {
   uid: string;
@@ -32,6 +33,23 @@ export interface Person {
   ministerios?: string[];
   criadoEm?: Timestamp;
   membroDesde?: Timestamp | string;
+}
+
+export interface Ministry {
+  id: string;
+  nome: string;
+  tipo: MinistryType;
+  ordem: number;
+  ativo: boolean;
+}
+
+export interface MinistryRequest {
+  id: string;
+  uid: string;
+  ministerioId: string;
+  status: "pendente" | "aprovada" | "recusada";
+  criadoEm?: Timestamp;
+  atualizadoEm?: Timestamp;
 }
 
 export interface Family {
@@ -157,4 +175,6 @@ export interface PortalData {
   presencasPg: PgAttendance[];
   participantesPg: PgParticipant[];
   solicitacoesExclusao: DeletionRequest[];
+  ministerios: Ministry[];
+  solicitacoesMinisterio: MinistryRequest[];
 }

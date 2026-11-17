@@ -471,7 +471,9 @@ export default function PerfilScreen() {
     setAdminSaving(true);
     try {
       await updateUserAccess(selectedAdminUser.uid, {
-        ministerios: selectedMinisterios,
+        ...(selectedAdminUser.uid === user?.uid
+          ? {}
+          : { ministerios: selectedMinisterios }),
         pequenoGrupoId: selectedPequenoGrupo[0] ?? null,
         salaEbdId: selectedSalaEbd[0] ?? null,
         familiaId: selectedFamilia[0] ?? null,
@@ -622,8 +624,15 @@ export default function PerfilScreen() {
                         Ministérios
                       </Text>
                       <Pressable
-                        onPress={() => setSelector("ministerios")}
-                        style={styles.selector}
+                        onPress={() => {
+                          if (selectedAdminUser.uid !== user.uid) {
+                            setSelector("ministerios");
+                          }
+                        }}
+                        style={[
+                          styles.selector,
+                          selectedAdminUser.uid === user.uid && styles.disabledSelector,
+                        ]}
                       >
                         <Text style={styles.selectorText}>
                           {selectedMinisterios.length
@@ -636,6 +645,11 @@ export default function PerfilScreen() {
                         </Text>
                         <Ionicons name="chevron-down" size={20} color="#023411" />
                       </Pressable>
+                      {selectedAdminUser.uid === user.uid ? (
+                        <Text style={styles.mutedText}>
+                          O próprio usuário não pode alterar seus ministérios.
+                        </Text>
+                      ) : null}
 
                       <Text style={[styles.label, styles.accessLabel]}>
                         Pequeno Grupo
@@ -810,6 +824,9 @@ const styles = StyleSheet.create({
     color: "#333",
     flex: 1,
     marginRight: 10,
+  },
+  disabledSelector: {
+    opacity: 0.6,
   },
   accessLabel: {
     marginTop: 6,
