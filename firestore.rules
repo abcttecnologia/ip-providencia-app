@@ -44,12 +44,21 @@ service cloud.firestore {
     }
 
     function isMemberViewer() {
-      return isAdmin()
-        || isSecretaria()
-        || isPastoral()
-        || hasFuncao('PASTOR_TITULAR')
-        || hasFuncao('VICE_PASTOR')
-        || hasFuncao('PRESBITERO');
+      return hasUserProfile()
+        && currentUser().ativo == true
+        && (
+          currentUser().perfil == 'ADMINISTRADOR'
+          || (
+            currentUser().funcoes is list
+            && currentUser().funcoes.hasAny([
+              'SECRETARIA',
+              'PASTORAL',
+              'PASTOR_TITULAR',
+              'VICE_PASTOR',
+              'PRESBITERO'
+            ])
+          )
+        );
     }
 
     function isStaff() {
@@ -57,7 +66,15 @@ service cloud.firestore {
     }
 
     function isCareStaff() {
-      return isAdmin() || isSecretaria() || isPastoral();
+      return hasUserProfile()
+        && currentUser().ativo == true
+        && (
+          currentUser().perfil == 'ADMINISTRADOR'
+          || (
+            currentUser().funcoes is list
+            && currentUser().funcoes.hasAny(['SECRETARIA', 'PASTORAL'])
+          )
+        );
     }
 
     function isActivePgUser() {

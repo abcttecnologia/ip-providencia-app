@@ -651,7 +651,7 @@ function AdminPortal({
               exclusionRequests: canReadDeletionRequests,
               ministryRequests: canManageMinistries,
               membersOnly: !canCare,
-            })
+            }, showSpinner)
           : {
               pessoas: [],
               familias: [],

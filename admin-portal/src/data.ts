@@ -13,6 +13,7 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
+import { limit, query as firestoreQuery } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 
 import { auth, db } from "./firebase";
@@ -59,6 +60,9 @@ type PersonChanges = Pick<
   Partial<Pick<Person, "perfil" | "ativo" | "funcoes">>;
 
 type AuditAction = "criar" | "editar" | "excluir" | "anonimizar";
+const PORTAL_CACHE_TTL_MS = 60_000;
+const PORTAL_CACHE_LIMIT = 100;
+const portalDataCache = new Map<string, { expiresAt: number; data: PortalData }>();
 
 function auditRecord(
   action: AuditAction,
@@ -80,7 +84,7 @@ function mapCollection<T extends { id?: string; uid?: string }>(
   collectionName: string,
   key: "id" | "uid",
 ) {
-  return getDocs(collection(db, collectionName))
+  return getDocs(firestoreQuery(collection(db, collectionName), limit(PORTAL_CACHE_LIMIT)))
     .then((snapshot) =>
       snapshot.docs.map(
         (item) => ({ ...item.data(), [key]: item.id }) as T,
@@ -99,9 +103,22 @@ export async function loadPortalData(
     ministryRequests?: boolean;
     membersOnly?: boolean;
   },
+  bypassCache = false,
 ): Promise<PortalData> {
+  const cacheKey = [
+    options.pastoral ? "1" : "0",
+    options.exclusionRequests ? "1" : "0",
+    options.ministryRequests ? "1" : "0",
+    options.membersOnly ? "1" : "0",
+  ].join("-");
+  if (!bypassCache) {
+    const cached = portalDataCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+  }
   if (options.membersOnly) {
-    return {
+    const result: PortalData = {
       pessoas: await mapCollection<Person>("users", "uid"),
       familias: await mapCollection<Family>("familias", "id"),
       historico: [],
@@ -116,6 +133,11 @@ export async function loadPortalData(
       ministerios: [],
       solicitacoesMinisterio: [],
     };
+    portalDataCache.set(cacheKey, {
+      expiresAt: Date.now() + PORTAL_CACHE_TTL_MS,
+      data: result,
+    });
+    return result;
   }
 
   const [
@@ -147,9 +169,10 @@ export async function loadPortalData(
     mapCollection<PgAttendance>("presencasPg", "id"),
     options.exclusionRequests
       ? getDocs(
-          query(
+          firestoreQuery(
             collection(db, "solicitacoesExclusao"),
             where("status", "==", "pendente"),
+            limit(100),
           ),
         ).catch((error: unknown) => {
           console.error("Falha ao carregar solicitações de exclusão:", error);
@@ -218,7 +241,10 @@ export async function loadPortalData(
     await Promise.all(
       smallGroupRecords.map(async (group) => {
         const snapshot = await getDocs(
-          collection(db, "pequenosGrupos", group.id, "participantesMeta"),
+          firestoreQuery(
+            collection(db, "pequenosGrupos", group.id, "participantesMeta"),
+            limit(100),
+          ),
         );
         return snapshot.docs.map(
           (participant) =>
@@ -257,7 +283,7 @@ export async function loadPortalData(
     left.proximoRetorno.localeCompare(right.proximoRetorno),
   );
 
-  return {
+  const result: PortalData = {
     pessoas,
     familias,
     historico,
@@ -275,6 +301,11 @@ export async function loadPortalData(
         (right.criadoEm?.toMillis() ?? 0) - (left.criadoEm?.toMillis() ?? 0),
     ),
   };
+  portalDataCache.set(cacheKey, {
+    expiresAt: Date.now() + PORTAL_CACHE_TTL_MS,
+    data: result,
+  });
+  return result;
 }
 
 export async function saveSmallGroupLeaders(
