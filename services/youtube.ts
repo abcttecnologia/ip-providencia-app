@@ -17,6 +17,17 @@ const CACHE_KEYS = {
   DETAILS: '@youtube_details_'
 };
 
+export interface YouTubeVideoDetails {
+  id: string;
+  snippet?: {
+    publishedAt?: string;
+    description?: string;
+  };
+  contentDetails?: {
+    duration?: string;
+  };
+}
+
 // --- CACHE ---
 async function salvarNoCache(chave: string, dados: any) {
   try {
@@ -32,7 +43,7 @@ async function lerDoCache(chave: string) {
   try {
     const valor = await AsyncStorage.getItem(chave);
     return valor ? JSON.parse(valor) : null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -59,7 +70,7 @@ export async function getPlaylists() {
       return { data: data.items, offline: false };
     }
     throw new Error("Erro API");
-  } catch (error) {
+  } catch {
     const cached = await lerDoCache(CACHE_KEYS.PLAYLISTS);
     return { data: cached || [], offline: true };
   }
@@ -80,30 +91,55 @@ export async function getPlaylistVideos(playlistId: string) {
       return { data: data.items, offline: false };
     }
     throw new Error("Erro");
-  } catch (error) {
+  } catch {
     const cached = await lerDoCache(CACHE_KEYS.VIDEOS + playlistId);
     return { data: cached || [], offline: true };
   }
 }
 
 export async function getVideoDetails(videoId: string) {
-  try {
-    let url = BASE_URL;
-    url += '/videos?part=snippet,contentDetails';
-    url += '&id=' + videoId;
-    url += '&key=' + API_KEY;
+  const resultado = await getVideoDetailsBatch([videoId]);
+  return {
+    data: resultado.data[videoId],
+    offline: resultado.offline,
+  };
+}
 
-    const response = await fetch(url);
-    if (response.ok) {
+export async function getVideoDetailsBatch(videoIds: string[]) {
+  const ids = [...new Set(videoIds.filter(Boolean))];
+  const details: Record<string, YouTubeVideoDetails> = {};
+  let offline = false;
+
+  for (let index = 0; index < ids.length; index += 50) {
+    const batch = ids.slice(index, index + 50);
+    try {
+      let url = BASE_URL;
+      url += '/videos?part=snippet,contentDetails';
+      url += '&id=' + batch.join(',');
+      url += '&key=' + API_KEY;
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Erro");
+
       const data = await response.json();
-      await salvarNoCache(CACHE_KEYS.DETAILS + videoId, data.items[0]);
-      return { data: data.items[0], offline: false };
+      await Promise.all(
+        (data.items ?? []).map(async (item: YouTubeVideoDetails) => {
+          details[item.id] = item;
+          await salvarNoCache(CACHE_KEYS.DETAILS + item.id, item);
+        }),
+      );
+    } catch {
+      offline = true;
+      await Promise.all(
+        batch.map(async (videoId) => {
+          const cached = await lerDoCache(CACHE_KEYS.DETAILS + videoId);
+          if (cached) details[videoId] = cached;
+        }),
+      );
     }
-    throw new Error("Erro");
-  } catch (error) {
-    const cached = await lerDoCache(CACHE_KEYS.DETAILS + videoId);
-    return { data: cached, offline: true };
   }
+
+  return { data: details, offline };
 }
 
 export async function getLatestVideos() {
