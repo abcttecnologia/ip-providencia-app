@@ -38,6 +38,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import type { DocumentSnapshot, Timestamp } from "firebase/firestore";
 
 import {
   anonymizeAdminRecords,
@@ -45,6 +46,7 @@ import {
   addMemberHistory,
   completeDeletionRequest,
   loadPortalData,
+  loadPaginatedCollection,
   respondToPrayerRequest,
   respondToPgInformationRequest,
   saveFamily,
@@ -1536,7 +1538,55 @@ function PeoplePage({
   onEdit: (person: Person) => void;
 }) {
   const [filter, setFilter] = useState("todos");
-  const filtered = data.pessoas.filter((person) => {
+  const [people, setPeople] = useState<Person[]>(data.pessoas);
+  const [cursor, setCursor] = useState<DocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(data.pessoas.length === 100);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    if (!search.trim()) {
+      setPeople(data.pessoas);
+      setCursor(null);
+      setHasMore(data.pessoas.length === 100);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadPaginatedCollection<Person>("users", "uid", "nome", "nome", search)
+        .then((result) => {
+          setPeople(result.items);
+          setCursor(result.cursor);
+          setHasMore(result.hasMore);
+        })
+        .catch((error) => console.error("Falha ao buscar pessoas:", error));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search, data.pessoas]);
+
+  async function loadMore() {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const result = await loadPaginatedCollection<Person>(
+        "users",
+        "uid",
+        "nome",
+        "nome",
+        search,
+        cursor,
+      );
+      setPeople((current) => search.trim()
+        ? [...current, ...result.items]
+        : [...current, ...result.items.filter((item) => !current.some((existing) => existing.uid === item.uid))]);
+      setCursor(result.cursor);
+      setHasMore(result.hasMore);
+    } catch (error) {
+      console.error("Falha ao carregar mais pessoas:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  const filtered = people.filter((person) => {
     const text = `${person.nome ?? ""} ${person.email ?? ""} ${person.telefone ?? ""}`.toLocaleLowerCase("pt-BR");
     const matchesText = text.includes(search.toLocaleLowerCase("pt-BR"));
     const matchesFilter =
@@ -1599,6 +1649,21 @@ function PeoplePage({
           </tbody>
         </table>
         {!filtered.length ? <EmptyState icon={<Users size={22} />} text={data.pessoas.length ? "Nenhum cadastro corresponde à busca ou ao filtro." : "Nenhuma pessoa cadastrada ainda."} /> : null}
+        {hasMore ? (
+          <div style={{ textAlign: "center", padding: "12px" }}>
+            <p className="muted">Mais resultados disponíveis.</p>
+            <button className="button button-secondary" onClick={() => void loadMore()} disabled={loadingMore}>
+              {loadingMore ? "Carregando..." : "Carregar mais"}
+            </button>
+          </div>
+        ) : null}
+        {hasMore ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: "12px" }}>
+            <button className="button button-secondary" onClick={() => void loadMore()} disabled={loadingMore}>
+              {loadingMore ? "Carregando..." : "Carregar mais"}
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -1615,7 +1680,49 @@ function FamiliesPage({
   canEdit: boolean;
   onEdit: (family: Family) => void;
 }) {
-  const families = data.familias.filter((family) =>
+  const [familiesState, setFamiliesState] = useState<Family[]>(data.familias);
+  const [cursor, setCursor] = useState<DocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(data.familias.length === 100);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    if (!search.trim()) {
+      setFamiliesState(data.familias);
+      setCursor(null);
+      setHasMore(data.familias.length === 100);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadPaginatedCollection<Family>("familias", "id", "nome", "nome", search)
+        .then((result) => {
+          setFamiliesState(result.items);
+          setCursor(result.cursor);
+          setHasMore(result.hasMore);
+        })
+        .catch((error) => console.error("Falha ao buscar famílias:", error));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search, data.familias]);
+
+  async function loadMore() {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const result = await loadPaginatedCollection<Family>(
+        "familias", "id", "nome", "nome", search, cursor,
+      );
+      setFamiliesState((current) => [
+        ...current,
+        ...result.items.filter((item) => !current.some((existing) => existing.id === item.id)),
+      ]);
+      setCursor(result.cursor);
+      setHasMore(result.hasMore);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  const families = familiesState.filter((family) =>
     family.nome.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR")),
   );
   return (
@@ -1638,6 +1745,14 @@ function FamiliesPage({
         );
       })}
       {!families.length ? <EmptyState icon={<House size={22} />} text="Nenhuma família encontrada." /> : null}
+      {hasMore ? (
+        <div style={{ textAlign: "center" }}>
+          <p className="muted">Mais resultados disponíveis.</p>
+          <button className="button button-secondary" onClick={() => void loadMore()} disabled={loadingMore}>
+            {loadingMore ? "Carregando..." : "Carregar mais"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1651,7 +1766,48 @@ function VisitsPage({
   search: string;
   onEdit: (visit: PastoralVisit) => void;
 }) {
-  const visits = data.visitas.filter((visit) =>
+  const [visitsState, setVisitsState] = useState<PastoralVisit[]>(data.visitas);
+  const [cursor, setCursor] = useState<DocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(data.visitas.length === 100);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    if (!search.trim()) {
+      setVisitsState(data.visitas);
+      setCursor(null);
+      setHasMore(data.visitas.length === 100);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadPaginatedCollection<PastoralVisit>("visitas", "id", "alvoNome", "alvoNome", search)
+        .then((result) => {
+          setVisitsState(result.items);
+          setCursor(result.cursor);
+          setHasMore(result.hasMore);
+        })
+        .catch((error) => console.error("Falha ao buscar visitas:", error));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search, data.visitas]);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const result = await loadPaginatedCollection<PastoralVisit>(
+        "visitas", "id", "alvoNome", "alvoNome", search, cursor,
+      );
+      setVisitsState((current) => [
+        ...current,
+        ...result.items.filter((item) => !current.some((existing) => existing.id === item.id)),
+      ]);
+      setCursor(result.cursor);
+      setHasMore(result.hasMore);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  const visits = visitsState.filter((visit) =>
     `${visit.alvoNome} ${visit.motivo} ${visit.visitante}`.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR")),
   );
   return (
@@ -1662,6 +1818,14 @@ function VisitsPage({
           <tbody>{visits.map((visit) => <tr key={visit.id}><td><div className="person-cell"><div className="avatar avatar-light"><Home size={16} /></div><span><strong>{visit.alvoNome}</strong><small>{visit.alvoTipo === "familia" ? "Família" : "Pessoa"}</small></span></div></td><td>{formatDate(visit.data)}</td><td>{visit.motivo || "Visita pastoral"}</td><td>{visit.visitante}</td><td><StatusBadge status={visit.status} /></td><td><button className="button button-small" onClick={() => onEdit(visit)}>Detalhes</button></td></tr>)}</tbody>
         </table>
         {!visits.length ? <EmptyState icon={<Home size={22} />} text="Nenhuma visita registrada." /> : null}
+        {hasMore ? (
+          <div style={{ textAlign: "center", padding: "12px" }}>
+            <p className="muted">Mais resultados disponíveis.</p>
+            <button className="button button-secondary" onClick={() => void loadMore()} disabled={loadingMore}>
+              {loadingMore ? "Carregando..." : "Carregar mais"}
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -1707,7 +1871,48 @@ function PrayerRequestsPage({
   onStatusChange: (request: PrayerRequest, status: PrayerRequestStatus) => void;
 }) {
   const [filter, setFilter] = useState<PrayerRequestStatus>("aberto");
-  const filtered = requests.filter((request) =>
+  const [requestsState, setRequestsState] = useState<PrayerRequest[]>(requests);
+  const [cursor, setCursor] = useState<DocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(requests.length === 100);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    if (!search.trim()) {
+      setRequestsState(requests);
+      setCursor(null);
+      setHasMore(requests.length === 100);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadPaginatedCollection<PrayerRequest>("pedidosOracao", "id", "titulo", "titulo", search)
+        .then((result) => {
+          setRequestsState(result.items);
+          setCursor(result.cursor);
+          setHasMore(result.hasMore);
+        })
+        .catch((error) => console.error("Falha ao buscar pedidos:", error));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search, requests]);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const result = await loadPaginatedCollection<PrayerRequest>(
+        "pedidosOracao", "id", "titulo", "titulo", search, cursor,
+      );
+      setRequestsState((current) => [
+        ...current,
+        ...result.items.filter((item) => !current.some((existing) => existing.id === item.id)),
+      ]);
+      setCursor(result.cursor);
+      setHasMore(result.hasMore);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  const filtered = requestsState.filter((request) =>
     request.status === filter &&
     `${request.titulo} ${request.texto}`
       .toLocaleLowerCase("pt-BR")
@@ -1841,6 +2046,14 @@ function PrayerRequestsPage({
               ? "Nenhum pedido corresponde ao filtro de texto."
               : "Nenhum pedido nesta aba."}
           />
+        ) : null}
+        {hasMore ? (
+          <div style={{ textAlign: "center", padding: "12px" }}>
+            <p className="muted">Mais resultados disponíveis.</p>
+            <button className="button button-secondary" onClick={() => void loadMore()} disabled={loadingMore}>
+              {loadingMore ? "Carregando..." : "Carregar mais"}
+            </button>
+          </div>
         ) : null}
       </div>
     </section>
@@ -2321,6 +2534,58 @@ function HistoryPage({
   search: string;
   onEdit: (history: MemberHistory) => void;
 }) {
+  type AuditRecord = {
+    id: string;
+    acao: string;
+    colecao: string;
+    docId: string;
+    porNome: string;
+    em?: Timestamp;
+  };
+  const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
+  const [auditCursor, setAuditCursor] = useState<DocumentSnapshot | null>(null);
+  const [auditHasMore, setAuditHasMore] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadPaginatedCollection<AuditRecord>(
+        "auditoria",
+        "id",
+        "porNome",
+        "porNome",
+        search,
+      ).then((result) => {
+        setAuditRecords(result.items);
+        setAuditCursor(result.cursor);
+        setAuditHasMore(result.hasMore);
+      }).catch((error) => console.error("Falha ao buscar auditoria:", error));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  async function loadMoreAudit() {
+    setAuditLoading(true);
+    try {
+      const result = await loadPaginatedCollection<AuditRecord>(
+        "auditoria",
+        "id",
+        "porNome",
+        "porNome",
+        search,
+        auditCursor,
+      );
+      setAuditRecords((current) => [
+        ...current,
+        ...result.items.filter((item) => !current.some((existing) => existing.id === item.id)),
+      ]);
+      setAuditCursor(result.cursor);
+      setAuditHasMore(result.hasMore);
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
   const records = data.historico.filter((item) => {
     const person = data.pessoas.find((candidate) => candidate.uid === item.pessoaUid);
     return `${person?.nome ?? ""} ${item.descricao} ${item.tipo}`.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR"));
@@ -2335,6 +2600,27 @@ function HistoryPage({
         })}
         {!records.length ? <EmptyState icon={<FileClock size={22} />} text="Nenhum registro de histórico." /> : null}
       </div>
+      {auditRecords.length ? (
+        <div className="compact-list" style={{ marginTop: "16px" }}>
+          <h3>Auditoria</h3>
+          {auditRecords.map((item) => (
+            <div className="compact-row" key={item.id}>
+              <div className="compact-copy">
+                <strong>{item.porNome}</strong>
+                <span>{item.acao} · {item.colecao} · {item.docId}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {auditHasMore ? (
+        <div style={{ textAlign: "center", padding: "12px" }}>
+          <p className="muted">Mais resultados de auditoria disponíveis.</p>
+          <button className="button button-secondary" onClick={() => void loadMoreAudit()} disabled={auditLoading}>
+            {auditLoading ? "Carregando..." : "Carregar mais"}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -12,7 +12,11 @@ import {
   runTransaction,
   where,
   writeBatch,
+  orderBy,
+  startAfter,
 } from "firebase/firestore";
+import type { DocumentSnapshot } from "firebase/firestore";
+import type { QueryConstraint } from "firebase/firestore";
 import { limit, query as firestoreQuery } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 
@@ -63,6 +67,46 @@ type AuditAction = "criar" | "editar" | "excluir" | "anonimizar";
 const PORTAL_CACHE_TTL_MS = 60_000;
 const PORTAL_CACHE_LIMIT = 100;
 const portalDataCache = new Map<string, { expiresAt: number; data: PortalData }>();
+const PAGINATED_PAGE_SIZE = 100;
+
+export interface PaginatedResult<T> {
+  items: T[];
+  cursor: DocumentSnapshot | null;
+  hasMore: boolean;
+}
+
+export async function loadPaginatedCollection<T>(
+  collectionName: string,
+  key: "id" | "uid",
+  orderField: string,
+  searchField: string,
+  searchText = "",
+  cursor: DocumentSnapshot | null = null,
+): Promise<PaginatedResult<T>> {
+  const term = searchText.trim();
+  const constraints: QueryConstraint[] = [
+    orderBy(orderField),
+  ];
+  if (term) {
+    constraints.push(where(searchField, ">=", term));
+    constraints.push(where(searchField, "<=", `${term}\uf8ff`));
+  }
+  if (cursor) constraints.push(startAfter(cursor));
+  constraints.push(limit(PAGINATED_PAGE_SIZE + 1));
+
+  const snapshot = await getDocs(
+    firestoreQuery(collection(db, collectionName), ...constraints),
+  );
+  const hasMore = snapshot.docs.length > PAGINATED_PAGE_SIZE;
+  const pageDocs = hasMore ? snapshot.docs.slice(0, PAGINATED_PAGE_SIZE) : snapshot.docs;
+  return {
+    items: pageDocs.map(
+      (item) => ({ ...item.data(), [key]: item.id }) as T,
+    ),
+    cursor: pageDocs.length ? pageDocs[pageDocs.length - 1] : cursor,
+    hasMore,
+  };
+}
 
 function auditRecord(
   action: AuditAction,
