@@ -39,6 +39,7 @@ import {
   configureDefaultSmallGroups,
   loadPortalData,
   respondToPrayerRequest,
+  respondToPgInformationRequest,
   saveFamily,
   saveFollowUp,
   saveSmallGroupLeaders,
@@ -831,6 +832,7 @@ function AdminPortal({
               requests={data.solicitacoesPg}
               groups={data.pequenosGrupos}
               search={query}
+              canSendInformation={canEditMembers}
               onUpdate={(request, status) =>
                 runActionSafely(
                   () =>
@@ -842,6 +844,17 @@ function AdminPortal({
                   status === "aprovada"
                     ? "Participante vinculado ao Pequeno Grupo."
                     : "Solicitação recusada.",
+                )
+              }
+              onRespondInformation={(request, information) =>
+                runActionSafely(
+                  () =>
+                    respondToPgInformationRequest(
+                      request,
+                      information,
+                      portalActor(profile),
+                    ),
+                  "Informações enviadas ao solicitante.",
                 )
               }
             />
@@ -1747,14 +1760,25 @@ function PgRequestsPage({
   requests,
   groups,
   search,
+  canSendInformation,
   onUpdate,
+  onRespondInformation,
 }: {
   requests: PgRequest[];
   groups: SmallGroup[];
   search: string;
+  canSendInformation: boolean;
   onUpdate: (
     request: PgRequest,
     status: Extract<PgRequest["status"], "aprovada" | "recusada">,
+  ) => Promise<void>;
+  onRespondInformation: (
+    request: PgRequest,
+    information: {
+      endereco: string;
+      linkGrupo: string;
+      material: string;
+    },
   ) => Promise<void>;
 }) {
   const [busyId, setBusyId] = useState("");
@@ -1764,6 +1788,17 @@ function PgRequestsPage({
     return (
       request.status === "pendente" &&
       request.tipo !== "informacoes" &&
+      `${request.nome} ${groupName}`
+        .toLocaleLowerCase("pt-BR")
+        .includes(search.toLocaleLowerCase("pt-BR"))
+    );
+  });
+  const informationRequests = requests.filter((request) => {
+    const groupName =
+      groups.find((group) => group.id === request.grupoId)?.nome ?? "";
+    return (
+      request.status === "pendente" &&
+      request.tipo === "informacoes" &&
       `${request.nome} ${groupName}`
         .toLocaleLowerCase("pt-BR")
         .includes(search.toLocaleLowerCase("pt-BR"))
@@ -1831,7 +1866,146 @@ function PgRequestsPage({
           />
         ) : null}
       </div>
+      <section className="panel table-panel">
+        <div className="table-toolbar">
+          <div>
+            <h2>Pedidos de informações</h2>
+            <p>
+              Envie endereço, link do grupo e material para quem pediu
+              informações.
+            </p>
+          </div>
+          <span className="inline-stat">
+            <MessageCircle size={16} /> {informationRequests.length} pendente(s)
+          </span>
+        </div>
+        <div className="pg-information-list">
+          {!canSendInformation ? (
+            <p className="muted">
+              Somente a Secretaria pode enviar os dados dos Pequenos Grupos.
+            </p>
+          ) : null}
+          {canSendInformation ? informationRequests.map((request) => (
+            <PgInformationForm
+              key={request.id}
+              request={request}
+              groupName={
+                groups.find((group) => group.id === request.grupoId)?.nome ??
+                "Grupo não encontrado"
+              }
+              busy={busyId === request.id}
+              onSubmit={async (information) => {
+                setBusyId(request.id);
+                try {
+                  await onRespondInformation(request, information);
+                } finally {
+                  setBusyId("");
+                }
+              }}
+            />
+          )) : null}
+          {canSendInformation && !informationRequests.length ? (
+            <EmptyState
+              icon={<Check size={22} />}
+              text={requests.some(
+                (request) =>
+                  request.status === "pendente" &&
+                  request.tipo === "informacoes",
+              )
+                ? "Nenhum pedido corresponde à busca."
+                : "Não há pedidos de informações pendentes."}
+            />
+          ) : null}
+        </div>
+      </section>
     </section>
+  );
+}
+
+function PgInformationForm({
+  request,
+  groupName,
+  busy,
+  onSubmit,
+}: {
+  request: PgRequest;
+  groupName: string;
+  busy: boolean;
+  onSubmit: (information: {
+    endereco: string;
+    linkGrupo: string;
+    material: string;
+  }) => Promise<void>;
+}) {
+  const [endereco, setEndereco] = useState(request.endereco ?? "");
+  const [linkGrupo, setLinkGrupo] = useState(request.linkGrupo ?? "");
+  const [material, setMaterial] = useState(request.material ?? "");
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    try {
+      await onSubmit({ endereco, linkGrupo, material });
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Não foi possível enviar as informações.",
+      );
+    }
+  }
+
+  return (
+    <form className="pg-information-form" onSubmit={(event) => void submit(event)}>
+      <div className="pg-information-heading">
+        <div>
+          <strong>{request.nome}</strong>
+          <span>{groupName}</span>
+        </div>
+        <small>
+          {request.criadoEm
+            ? formatDate(request.criadoEm.toDate().toISOString().slice(0, 10))
+            : "—"}
+        </small>
+      </div>
+      <div className="pg-information-fields">
+        <label className="field">
+          <span>Endereço</span>
+          <input
+            value={endereco}
+            onChange={(event) => setEndereco(event.target.value)}
+            maxLength={240}
+            required
+          />
+        </label>
+        <label className="field">
+          <span>Link do grupo</span>
+          <input
+            type="url"
+            value={linkGrupo}
+            onChange={(event) => setLinkGrupo(event.target.value)}
+            maxLength={500}
+            placeholder="https://..."
+            required
+          />
+        </label>
+        <label className="field field-span">
+          <span>Material</span>
+          <textarea
+            value={material}
+            onChange={(event) => setMaterial(event.target.value)}
+            maxLength={2000}
+            placeholder="Informe o material ou o link para acessá-lo."
+            required
+          />
+        </label>
+      </div>
+      {error ? <p className="form-error">{error}</p> : null}
+      <button className="button button-primary" type="submit" disabled={busy}>
+        {busy ? "Enviando..." : "Enviar informações"}
+      </button>
+    </form>
   );
 }
 

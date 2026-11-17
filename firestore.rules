@@ -888,15 +888,7 @@ service cloud.firestore {
           request.auth.uid,
           request.resource.data.grupoId
         );
-      allow update: if (
-        isCareStaff() || isLiderDoPg(resource.data.grupoId)
-      )
-        && resource.data.status == 'pendente'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status',
-          'atualizadoEm',
-          'resposta'
-        ])
+      allow update: if resource.data.status == 'pendente'
         && request.resource.data.atualizadoEm == request.time
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.grupoId == resource.data.grupoId
@@ -907,23 +899,38 @@ service cloud.firestore {
         && (
           (
             resource.data.get('tipo', 'participacao') == 'informacoes'
+            && isSecretaria()
             && request.resource.data.status == 'respondida'
-            && request.resource.data.diff(resource.data).affectedKeys()
-              .hasAll(['status', 'atualizadoEm', 'resposta'])
-            && request.resource.data.resposta is string
-            && request.resource.data.resposta.size() > 0
-            && request.resource.data.resposta.size() <= 2000
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'endereco',
+              'linkGrupo',
+              'material',
+              'status',
+              'atualizadoEm'
+            ])
+            && request.resource.data.endereco is string
+            && request.resource.data.endereco.size() > 0
+            && request.resource.data.endereco.size() <= 240
+            && request.resource.data.linkGrupo is string
+            && request.resource.data.linkGrupo.size() > 0
+            && request.resource.data.linkGrupo.size() <= 500
+            && request.resource.data.material is string
+            && request.resource.data.material.size() > 0
+            && request.resource.data.material.size() <= 2000
           )
           || (
             resource.data.get('tipo', 'participacao') == 'participacao'
+            && (isCareStaff() || isLiderDoPg(resource.data.grupoId))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status',
+              'atualizadoEm'
+            ])
             && request.resource.data.status in ['aprovada', 'recusada']
-            && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['status', 'atualizadoEm'])
+            && (
+              isCareStaff()
+              || resource.data.uid != request.auth.uid
+            )
           )
-        )
-        && (
-          isCareStaff()
-          || resource.data.uid != request.auth.uid
         );
       allow delete: if false;
     }

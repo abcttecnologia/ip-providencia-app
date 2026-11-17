@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Image,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -27,7 +28,6 @@ import {
   getMyPgRequests,
   getPequenosGrupos,
   removePgParticipant,
-  replyToPgInformationRequest,
   requestPgInformation,
   savePgAttendance,
   updatePgRequestStatus,
@@ -240,27 +240,6 @@ export default function PequenosGruposScreen() {
     }
   }
 
-  async function handleInformationReply(
-    request: SolicitacaoPg,
-    reply: string,
-  ) {
-    setBusyId(request.id);
-    try {
-      await replyToPgInformationRequest(request, reply);
-      await loadGroups();
-      Alert.alert('Resposta enviada', 'A pessoa verá sua resposta no aplicativo.');
-    } catch (actionError) {
-      Alert.alert(
-        'Não foi possível responder',
-        actionError instanceof Error
-          ? actionError.message
-          : 'Verifique sua conexão e tente novamente.',
-      );
-    } finally {
-      setBusyId('');
-    }
-  }
-
   async function handleRequest(
     request: SolicitacaoPg,
     status: 'aprovada' | 'recusada',
@@ -460,15 +439,7 @@ export default function PequenosGruposScreen() {
                           ? 'Pediu mais informações sobre o grupo'
                           : 'Pedido para participar do grupo'}
                       </Text>
-                      {request.tipo === 'informacoes' ? (
-                        <PgInformationReply
-                          busy={busyId === request.id}
-                          onSubmit={(reply) =>
-                            void handleInformationReply(request, reply)
-                          }
-                        />
-                      ) : (
-                        <View style={styles.actionRow}>
+                      <View style={styles.actionRow}>
                         <Pressable
                           style={[styles.actionButton, styles.approveButton]}
                           disabled={busyId === request.id}
@@ -484,7 +455,6 @@ export default function PequenosGruposScreen() {
                           <Text style={styles.rejectText}>Recusar</Text>
                         </Pressable>
                       </View>
-                      )}
                     </AppCard>
                   ))
                 ) : (
@@ -551,12 +521,13 @@ export default function PequenosGruposScreen() {
 
         <Text style={styles.sectionTitle}>Encontrar um PG</Text>
         <Text style={styles.intro}>
-          Conheça os Pequenos Grupos ativos e solicite participação pelo app.
+          Conheça os Pequenos Grupos ativos e solicite informações pelo app.
         </Text>
         {groups.length ? (
           groups.map((group) => {
             const request = requestByGroup.get(group.id);
             const isMyGroup = myGroup?.id === group.id;
+            const groupLink = request?.linkGrupo;
             return (
               <AppCard key={group.id}>
                 <Text style={styles.groupName}>{group.nome}</Text>
@@ -578,11 +549,32 @@ export default function PequenosGruposScreen() {
                 </Text>
                 {group.local ? <InfoRow label="Local" value={group.local} /> : null}
                 {request?.tipo === 'informacoes' &&
-                request.status === 'respondida' &&
-                request.resposta ? (
+                request.status === 'respondida' ? (
                   <View style={styles.infoReply}>
-                    <Text style={styles.infoReplyTitle}>Resposta dos líderes</Text>
-                    <Text style={styles.requestText}>{request.resposta}</Text>
+                    <Text style={styles.infoReplyTitle}>
+                      Informações enviadas pela Secretaria
+                    </Text>
+                    {request.endereco ? (
+                      <InfoRow label="Endereço" value={request.endereco} />
+                    ) : null}
+                    {groupLink ? (
+                      <Pressable
+                        onPress={() => {
+                          void Linking.openURL(groupLink).catch(() =>
+                            Alert.alert(
+                              'Link indisponível',
+                              'Não foi possível abrir o link do grupo.',
+                            ),
+                          );
+                        }}
+                        accessibilityRole="link"
+                      >
+                        <InfoRow label="Link do grupo" value={groupLink} />
+                      </Pressable>
+                    ) : null}
+                    {request.material ? (
+                      <InfoRow label="Material" value={request.material} />
+                    ) : null}
                   </View>
                 ) : null}
                 {canRequest && !isMyGroup ? (
@@ -611,7 +603,7 @@ export default function PequenosGruposScreen() {
                   </Text>
                 ) : !canRequest && !isMyGroup ? (
                   <Text style={styles.contactHint}>
-                    A solicitação de participação está disponível para membros sem vínculo a outro PG.
+                    A solicitação de informações está disponível para membros sem vínculo a outro PG.
                   </Text>
                 ) : null}
               </AppCard>
@@ -635,36 +627,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <Text style={styles.infoLabel}>{label}: </Text>
       {value}
     </Text>
-  );
-}
-
-function PgInformationReply({
-  busy,
-  onSubmit,
-}: {
-  busy: boolean;
-  onSubmit: (reply: string) => void;
-}) {
-  const [reply, setReply] = useState('');
-  return (
-    <View>
-      <TextInput
-        value={reply}
-        onChangeText={setReply}
-        placeholder="Escreva as informações para a pessoa"
-        multiline
-        maxLength={2000}
-        style={styles.replyInput}
-        accessibilityLabel="Resposta ao pedido de informações do PG"
-      />
-      <View style={styles.saveButton}>
-        <AppButton
-          title={busy ? 'Enviando...' : 'Enviar informações'}
-          onPress={() => onSubmit(reply)}
-          disabled={busy || !reply.trim()}
-        />
-      </View>
-    </View>
   );
 }
 

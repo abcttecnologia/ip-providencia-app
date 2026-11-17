@@ -152,10 +152,12 @@ export async function getPendingPgRequests(
       where('status', '==', 'pendente'),
     ),
   );
-  return snapshot.docs.map((requestDoc) => ({
-    id: requestDoc.id,
-    ...requestDoc.data(),
-  }) as SolicitacaoPg);
+  return snapshot.docs
+    .map((requestDoc) => ({
+      id: requestDoc.id,
+      ...requestDoc.data(),
+    }) as SolicitacaoPg)
+    .filter((request) => request.tipo !== 'informacoes');
 }
 
 export async function updatePgRequestStatus(
@@ -179,29 +181,6 @@ export async function updatePgRequestStatus(
     });
   }
   await batch.commit();
-}
-
-export async function replyToPgInformationRequest(
-  request: SolicitacaoPg,
-  reply: string,
-) {
-  if (!auth.currentUser?.uid) {
-    throw new Error('Entre na sua conta para responder ao pedido.');
-  }
-  if (request.tipo !== 'informacoes' || request.status !== 'pendente') {
-    throw new Error('Este pedido de informações não está mais pendente.');
-  }
-
-  const text = reply.trim();
-  if (!text || text.length > 2000) {
-    throw new Error('A resposta deve ter entre 1 e 2000 caracteres.');
-  }
-
-  await updateDoc(doc(db, 'solicitacoesPg', request.id), {
-    status: 'respondida',
-    resposta: text,
-    atualizadoEm: serverTimestamp(),
-  });
 }
 
 export async function getPgParticipants(

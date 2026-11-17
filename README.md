@@ -51,12 +51,13 @@ O aplicativo oferece uma experiência simples, rápida e intuitiva, permitindo q
 ## Pequenos Grupos
 
 Membros consultam os próximos encontros na agenda Google e podem pedir mais
-informações sobre um PG pelo app. Os líderes respondem pelo app; a resposta
-aparece para quem enviou o pedido. A administração configura os quatro grupos
-oficiais e a administração ou secretaria vincula as contas dos líderes pelo
-portal. Líderes também consultam participantes e pedidos de oração compartilhados
-e registram presença. A lista do app usa documentos mínimos de nome e foto, sem
-dar acesso aos demais dados cadastrais.
+informações sobre um PG pelo app. A secretaria responde pelo portal com o
+endereço, link do grupo e material; esses dados aparecem para quem enviou o
+pedido. A administração configura os quatro grupos oficiais e a administração
+ou secretaria vincula as contas dos líderes pelo portal. Líderes também
+consultam participantes e pedidos de oração compartilhados e registram
+presença. A lista do app usa documentos mínimos de nome e foto, sem dar acesso
+aos demais dados cadastrais.
 
 No portal, `PASTOR_TITULAR`, `VICE_PASTOR` e `PRESBITERO` podem visualizar os
 cadastros de pessoas, mas não editá-los. A edição cadastral é exclusiva de

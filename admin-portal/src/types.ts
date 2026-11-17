@@ -122,7 +122,9 @@ export interface PgRequest {
   nome: string;
   grupoId: string;
   tipo?: "informacoes" | "participacao";
-  resposta?: string;
+  endereco?: string;
+  linkGrupo?: string;
+  material?: string;
   status: "pendente" | "aprovada" | "recusada" | "respondida";
   criadoEm?: Timestamp;
 }

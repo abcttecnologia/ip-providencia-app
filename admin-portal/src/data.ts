@@ -453,6 +453,54 @@ export async function updatePgRequest(
   });
 }
 
+export async function respondToPgInformationRequest(
+  request: PgRequest,
+  information: {
+    endereco: string;
+    linkGrupo: string;
+    material: string;
+  },
+  actor: PortalActor,
+) {
+  if (!actor.funcoes?.includes("SECRETARIA")) {
+    throw new Error("Somente a secretaria pode enviar informações dos PGs.");
+  }
+  if (request.tipo !== "informacoes" || request.status !== "pendente") {
+    throw new Error("Esta solicitação de informações não está pendente.");
+  }
+
+  const endereco = information.endereco.trim();
+  const linkGrupo = information.linkGrupo.trim();
+  const material = information.material.trim();
+  if (!endereco || !linkGrupo || !material) {
+    throw new Error("Preencha endereço, link do grupo e material.");
+  }
+  if (endereco.length > 240 || linkGrupo.length > 500 || material.length > 2000) {
+    throw new Error("Um dos campos ultrapassa o limite permitido.");
+  }
+
+  const requestRef = doc(db, "solicitacoesPg", request.id);
+  const auditRef = doc(collection(db, "auditoria"));
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(requestRef);
+    if (!snapshot.exists() || snapshot.data().status !== "pendente") {
+      throw new Error("Esta solicitação já foi atualizada.");
+    }
+
+    transaction.update(requestRef, {
+      endereco,
+      linkGrupo,
+      material,
+      status: "respondida",
+      atualizadoEm: serverTimestamp(),
+    });
+    transaction.set(
+      auditRef,
+      auditRecord("editar", "solicitacoesPg", request.id, actor),
+    );
+  });
+}
+
 export async function updatePrayerRequestStatus(
   requestId: string,
   status: PrayerRequestStatus,
