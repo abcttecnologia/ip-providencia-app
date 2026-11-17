@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -11,14 +12,17 @@ import {
 } from 'react-native';
 
 import { getEventos } from '../../services/eventos';
+import { deleteEvento } from '../../services/eventos';
+import { useCurrentUserProfile } from '../../hooks/useCurrentUserProfile';
 
 export default function EventosScreen() {
+  const { user } = useCurrentUserProfile();
   const [eventos, setEventos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    carregarEventos();
-  }, []);
+  const canManage =
+    user?.ativo === true &&
+    (user.perfil === 'ADMINISTRADOR' ||
+      user.funcoes?.includes('SECRETARIA'));
 
  async function carregarEventos() {
   try {
@@ -34,8 +38,43 @@ export default function EventosScreen() {
   } finally {
     setLoading(false);
   }
-}
+ }
 
+ useEffect(() => {
+   const timer = setTimeout(() => void carregarEventos(), 0);
+   return () => clearTimeout(timer);
+ }, []);
+
+ function confirmDelete(evento: any) {
+    Alert.alert(
+      'Excluir evento?',
+      'Essa ação não pode ser desfeita.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => void removeEvento(evento),
+        },
+      ],
+    );
+   }
+
+   async function removeEvento(evento: any) {
+    try {
+      await deleteEvento(evento.id);
+      setEventos((current) => current.filter((item) => item.id !== evento.id));
+      Alert.alert('Excluído', 'O evento foi excluído.');
+    } catch (deleteError) {
+      console.error('Falha ao excluir evento:', deleteError);
+      Alert.alert(
+        'Não foi possível excluir',
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Tente novamente em alguns instantes.',
+      );
+    }
+}
   if (loading) {
     return (
       <View
@@ -160,8 +199,8 @@ export default function EventosScreen() {
           Acompanhe os eventos, campanhas e programações especiais da Igreja.
         </Text>
                {eventos.map((evento) => (
+          <View key={evento.id} style={{ marginHorizontal: 16, marginBottom: 16 }}>
           <Pressable
-            key={evento.id}
             onPress={() =>
               router.push({
                 pathname: '/eventos',
@@ -171,8 +210,6 @@ export default function EventosScreen() {
               })
             }
             style={{
-              marginHorizontal: 16,
-              marginBottom: 16,
               backgroundColor: '#FFF',
               borderRadius: 22,
               padding: 14,
@@ -246,6 +283,25 @@ export default function EventosScreen() {
               color="#546B5F"
             />
           </Pressable>
+          {canManage ? (
+            <Pressable
+              onPress={() => confirmDelete(evento)}
+              accessibilityRole="button"
+              accessibilityLabel={`Excluir evento ${evento.titulo}`}
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                paddingVertical: 8,
+              }}
+            >
+              <Ionicons name="trash-outline" size={18} color="#B3261E" />
+              <Text style={{ color: '#B3261E', marginLeft: 6, fontWeight: '700' }}>
+                Excluir
+              </Text>
+            </Pressable>
+          ) : null}
+          </View>
         ))}
       </ScrollView>
     </View>

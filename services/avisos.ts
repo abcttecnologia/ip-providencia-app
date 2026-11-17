@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  getDoc,
   getDocs,
   serverTimestamp,
   updateDoc,
@@ -16,7 +17,7 @@ import type {
 } from '../types/firestore';
 import { canReadAudience, getAudienceQueries } from './audience';
 import { lerCache, salvarCache } from './cache';
-import { db } from './firebase';
+import { auth, db } from './firebase';
 
 export type { Aviso } from '../types/firestore';
 
@@ -84,5 +85,26 @@ export async function updateAviso(
 }
 
 export async function deleteAviso(id: string) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Entre na sua conta.');
+  const profile = (await getDoc(doc(db, 'users', uid))).data();
+  const allowed =
+    profile?.ativo === true &&
+    (profile.perfil === 'ADMINISTRADOR' ||
+      (Array.isArray(profile.funcoes) &&
+        profile.funcoes.includes('SECRETARIA')));
+  if (!allowed) throw new Error('Sem permissão para excluir avisos.');
+
   await deleteDoc(doc(db, 'Avisos', id));
+  await addDoc(collection(db, 'auditoria'), {
+    acao: 'excluir',
+    colecao: 'Avisos',
+    docId: id,
+    por: uid,
+    porNome:
+      typeof profile.nome === 'string'
+        ? profile.nome
+        : auth.currentUser?.email ?? 'Usuário',
+    em: serverTimestamp(),
+  });
 }

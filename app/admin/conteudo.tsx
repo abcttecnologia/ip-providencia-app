@@ -502,6 +502,17 @@ export default function AdminContentScreen() {
             disabled={saving}
           />
           {editingId ? (
+            <Pressable
+              onPress={() => confirmDelete(editingId, titulo)}
+              accessibilityRole="button"
+              style={styles.cancelEdit}
+            >
+              <Text style={{ color: "#B3261E", fontWeight: "700" }}>
+                Excluir
+              </Text>
+            </Pressable>
+          ) : null}
+          {editingId ? (
             <Pressable onPress={resetForm} style={styles.cancelEdit}>
               <Text style={styles.linkText}>Cancelar edição</Text>
             </Pressable>

@@ -145,8 +145,9 @@ export default function AnotacoesScreen() {
   async function removeNote(id: string) {
     try {
       await deleteAnotacao(id);
+      setNotes((current) => current.filter((note) => note.id !== id));
       if (editingId === id) clearForm();
-      loadNotes();
+      Alert.alert("Excluído", "A anotação foi excluída.");
     } catch (deleteError) {
       console.error("Falha ao excluir anotação:", deleteError);
       Alert.alert(

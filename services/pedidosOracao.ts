@@ -6,6 +6,7 @@ import {
   getDocs,
   query,
   serverTimestamp,
+  deleteDoc,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -190,4 +191,21 @@ export async function updateMeuPedidoOracao(
     pequenoGrupoId,
     atualizadoEm: serverTimestamp(),
   });
+}
+
+export async function deleteMeuPedidoOracao(id: string) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Entre na sua conta para excluir o pedido.');
+
+  const requestRef = doc(db, 'pedidosOracao', id);
+  const requestSnapshot = await getDoc(requestRef);
+  if (!requestSnapshot.exists()) {
+    throw new Error('Este pedido já foi excluído.');
+  }
+  if (requestSnapshot.data().autorUid !== uid) {
+    throw new Error('Somente o autor pode excluir este pedido.');
+  }
+
+  await deleteDoc(doc(db, 'pedidosOracao', id, 'respostas', 'pastoral'));
+  await deleteDoc(requestRef);
 }

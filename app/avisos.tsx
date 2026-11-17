@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Linking, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, Text, View } from 'react-native';
 import Hyperlink from 'react-native-hyperlink';
 
 import AppCard from '../components/ui/AppCard';
@@ -12,17 +12,19 @@ import RefreshableScroll from '../components/ui/RefreshableScroll';
 import Screen from '../components/ui/Screen';
 import ScreenLoader from '../components/ui/ScreenLoader';
 
-import { Aviso, getAvisos } from '../services/avisos';
+import { Aviso, deleteAviso, getAvisos } from '../services/avisos';
+import { useCurrentUserProfile } from '../hooks/useCurrentUserProfile';
 
 export default function AvisosScreen() {
+  const { user } = useCurrentUserProfile();
   const [avisos, setAvisos] = useState<Aviso[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [offline, setOffline] = useState(false);
-
-  useEffect(() => {
-    carregarAvisos();
-  }, []);
+  const canManage =
+    user?.ativo === true &&
+    (user.perfil === 'ADMINISTRADOR' ||
+      user.funcoes?.includes('SECRETARIA'));
 
   async function carregarAvisos() {
     try {
@@ -45,13 +47,48 @@ export default function AvisosScreen() {
     }
   }
 
+  useEffect(() => {
+    const timer = setTimeout(() => void carregarAvisos(), 0);
+    return () => clearTimeout(timer);
+  }, []);
+
   async function atualizar() {
     setRefreshing(true);
-
     try {
       await carregarAvisos();
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  function confirmDelete(aviso: Aviso) {
+    Alert.alert(
+      'Excluir aviso?',
+      'Essa ação não pode ser desfeita.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => void removeAviso(aviso),
+        },
+      ],
+    );
+  }
+
+  async function removeAviso(aviso: Aviso) {
+    try {
+      await deleteAviso(aviso.id);
+      setAvisos((current) => current.filter((item) => item.id !== aviso.id));
+      Alert.alert('Excluído', 'O aviso foi excluído.');
+    } catch (deleteError) {
+      console.error('Falha ao excluir aviso:', deleteError);
+      Alert.alert(
+        'Não foi possível excluir',
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Tente novamente em alguns instantes.',
+      );
     }
   }
 
@@ -134,6 +171,19 @@ export default function AvisosScreen() {
                     </Text>
                   </View>
                 )}
+                {canManage ? (
+                  <Pressable
+                    onPress={() => confirmDelete(aviso)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Excluir aviso ${aviso.titulo}`}
+                    style={{ flexDirection: 'row', alignSelf: 'flex-end', alignItems: 'center', marginBottom: 8 }}
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#B3261E" />
+                    <Text style={{ color: '#B3261E', marginLeft: 6, fontWeight: '700' }}>
+                      Excluir
+                    </Text>
+                  </Pressable>
+                ) : null}
 
                 <Text
                   style={{

@@ -14,6 +14,7 @@ import ScreenLoader from "../components/ui/ScreenLoader";
 import { useCurrentUserProfile } from "../hooks/useCurrentUserProfile";
 import {
   createPedidoOracao,
+  deleteMeuPedidoOracao,
   getMeusPedidosOracao,
   getPedidosDoMeuPg,
 } from "../services/pedidosOracao";
@@ -157,6 +158,38 @@ export default function PedidosOracaoScreen() {
     }
   }
 
+  function confirmDeleteRequest(request: PedidoOracao) {
+    Alert.alert(
+      "Excluir este pedido?",
+      "Essa ação não pode ser desfeita.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: () => void removeRequest(request.id),
+        },
+      ],
+    );
+  }
+
+  async function removeRequest(id: string) {
+    try {
+      await deleteMeuPedidoOracao(id);
+      setOwnRequests((current) => current.filter((request) => request.id !== id));
+      setGroupRequests((current) => current.filter((request) => request.id !== id));
+      Alert.alert("Excluído", "O pedido foi excluído.");
+    } catch (deleteError) {
+      console.error("Falha ao excluir pedido:", deleteError);
+      Alert.alert(
+        "Não foi possível excluir",
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Tente novamente em alguns instantes.",
+      );
+    }
+  }
+
   if (
     profileLoading ||
     (user && (requestsLoading || loadedFor !== requestScope))
@@ -290,7 +323,12 @@ export default function PedidosOracaoScreen() {
             </View>
             {filteredOwnRequests.length ? (
               filteredOwnRequests.map((request) => (
-                <PrayerCard key={request.id} request={request} own />
+                <PrayerCard
+                  key={request.id}
+                  request={request}
+                  own
+                  onDelete={() => confirmDeleteRequest(request)}
+                />
               ))
             ) : (
               <EmptyState
@@ -324,9 +362,11 @@ export default function PedidosOracaoScreen() {
 function PrayerCard({
   request,
   own = false,
+  onDelete,
 }: {
   request: PedidoOracao;
   own?: boolean;
+  onDelete?: () => void;
 }) {
   return (
     <AppCard>
@@ -350,6 +390,17 @@ function PrayerCard({
             </Text>
           ) : null}
         </View>
+      ) : null}
+      {own ? (
+        <Pressable
+          onPress={onDelete}
+          accessibilityRole="button"
+          accessibilityLabel={`Excluir ${request.titulo}`}
+          style={styles.deleteButton}
+        >
+          <Ionicons name="trash-outline" size={18} color="#B3261E" />
+          <Text style={styles.deleteText}>Excluir</Text>
+        </Pressable>
       ) : null}
     </AppCard>
   );
@@ -474,6 +525,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 8,
     textAlign: "right",
+  },
+  deleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-end",
+    gap: 6,
+    marginTop: 12,
+  },
+  deleteText: {
+    color: "#B3261E",
+    fontSize: 13,
+    fontWeight: "700",
   },
   emptyText: {
     color: "#666",
