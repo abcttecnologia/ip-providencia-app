@@ -2,7 +2,7 @@ import { lerCache, salvarCache } from './cache';
 import { requireEnv } from './env';
 import type { ServiceResult } from '../types/firestore';
 
-interface GoogleCalendarEvent {
+export interface GoogleCalendarEvent {
   id: string;
   summary: string;
   description?: string;

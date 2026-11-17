@@ -36,6 +36,7 @@ import {
   anonymizePastoralRecords,
   addMemberHistory,
   completeDeletionRequest,
+  configureDefaultSmallGroups,
   loadPortalData,
   respondToPrayerRequest,
   saveFamily,
@@ -140,8 +141,17 @@ function isCareStaff(profile: Person) {
   );
 }
 
+function isMemberViewer(profile: Person) {
+  return (
+    isCareStaff(profile) ||
+    hasFunction(profile, "PASTOR_TITULAR") ||
+    hasFunction(profile, "VICE_PASTOR") ||
+    hasFunction(profile, "PRESBITERO")
+  );
+}
+
 function isPortalStaff(profile: Person) {
-  return isCareStaff(profile) || hasFunction(profile, "TESOURARIA");
+  return isMemberViewer(profile) || hasFunction(profile, "TESOURARIA");
 }
 
 function portalActor(profile: Person): PortalActor {
@@ -463,13 +473,15 @@ function AdminPortal({
   onSignOut: () => void;
 }) {
   const canCare = isCareStaff(profile);
+  const canViewMembers = isMemberViewer(profile);
+  const canEditMembers = hasFunction(profile, "SECRETARIA");
   const canViewPastoral = isPastoral(profile);
   const canReadDeletionRequests = isAdmin(profile) || canViewPastoral;
   const isAdministrator = isAdmin(profile);
   const canManagePg =
     isAdministrator || hasFunction(profile, "SECRETARIA");
   const [page, setPage] = useState<PageKey>(
-    canCare ? "dashboard" : "tesouraria",
+    canViewMembers ? "dashboard" : "tesouraria",
   );
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -484,10 +496,11 @@ function AdminPortal({
     async (showSpinner = false) => {
       if (showSpinner) setRefreshing(true);
       try {
-        const result = canCare
+        const result = canCare || canViewMembers
           ? await loadPortalData({
               pastoral: canViewPastoral,
               exclusionRequests: canReadDeletionRequests,
+              membersOnly: !canCare,
             })
           : {
               pessoas: [],
@@ -521,7 +534,14 @@ function AdminPortal({
         setRefreshing(false);
       }
     },
-    [canCare, canReadDeletionRequests, canViewPastoral, onProfileUpdate, profile.uid],
+    [
+      canCare,
+      canReadDeletionRequests,
+      canViewMembers,
+      canViewPastoral,
+      onProfileUpdate,
+      profile.uid,
+    ],
   );
 
   useEffect(() => {
@@ -531,6 +551,8 @@ function AdminPortal({
   const title = pageTitles[page];
   const visibleNavigation = navigation.filter(({ key }) => {
     if (key === "tesouraria") return hasFunction(profile, "TESOURARIA");
+    if (key === "dashboard") return canViewMembers;
+    if (key === "pessoas") return canViewMembers;
     if (key === "acompanhamentos" || key === "pedidosOracao") return canViewPastoral;
     if (key === "solicitacoesPg") return canManagePg;
     if (key === "pequenosGrupos") return canCare;
@@ -542,6 +564,9 @@ function AdminPortal({
     : [
         hasFunction(profile, "SECRETARIA") ? "Secretaria" : "",
         canViewPastoral ? "Pastoral" : "",
+        hasFunction(profile, "PASTOR_TITULAR") ? "Pastor titular" : "",
+        hasFunction(profile, "VICE_PASTOR") ? "Vice-pastor" : "",
+        hasFunction(profile, "PRESBITERO") ? "Presbítero" : "",
         hasFunction(profile, "TESOURARIA") ? "Tesouraria" : "",
       ]
         .filter(Boolean)
@@ -550,11 +575,15 @@ function AdminPortal({
   useEffect(() => {
     const pageIsAllowed =
       (page === "tesouraria" && hasFunction(profile, "TESOURARIA")) ||
+      (page === "dashboard" && canViewMembers) ||
+      (page === "pessoas" && canViewMembers) ||
       ((page === "acompanhamentos" || page === "pedidosOracao") && canViewPastoral) ||
       (page === "solicitacoesPg" && canManagePg) ||
       (page === "pequenosGrupos" && canCare) ||
       (page === "solicitacoes" && canReadDeletionRequests) ||
       (page !== "tesouraria" &&
+      page !== "dashboard" &&
+      page !== "pessoas" &&
         page !== "acompanhamentos" &&
         page !== "pedidosOracao" &&
         page !== "pequenosGrupos" &&
@@ -562,12 +591,13 @@ function AdminPortal({
         page !== "solicitacoes" &&
         canCare);
     if (!pageIsAllowed) {
-      setPage(canCare ? "dashboard" : "tesouraria");
+      setPage(canViewMembers ? "dashboard" : "tesouraria");
     }
   }, [
     page,
     profile,
     canCare,
+    canViewMembers,
     canManagePg,
     canReadDeletionRequests,
     canViewPastoral,
@@ -718,8 +748,8 @@ function AdminPortal({
             <PeoplePage
               data={data}
               search={query}
-              actorUid={profile.uid}
               canManageAccess={isAdministrator}
+              canEditData={canEditMembers}
               onEdit={(person) => setModal({ kind: "person", person })}
             />
           ) : null}
@@ -782,6 +812,17 @@ function AdminPortal({
               data={data}
               search={query}
               canManagePg={canManagePg}
+              isAdministrator={isAdministrator}
+              onConfigure={() =>
+                runActionSafely(
+                  () =>
+                    configureDefaultSmallGroups(
+                      data.pequenosGrupos,
+                      portalActor(profile),
+                    ),
+                  "Os quatro PGs foram configurados. Vincule as contas dos líderes para ativar aprovações e notificações.",
+                )
+              }
               onEditLeaders={(group) => setModal({ kind: "leaders", group })}
             />
           ) : null}
@@ -844,6 +885,7 @@ function AdminPortal({
               person={modal.person}
               actorUid={profile.uid}
               canManageAccess={isAdministrator}
+              canEditData={canEditMembers}
               families={data.familias}
               onCancel={() => setModal(null)}
               onSave={(person) =>
@@ -1261,14 +1303,14 @@ function FlowStep({
 function PeoplePage({
   data,
   search,
-  actorUid,
   canManageAccess,
+  canEditData,
   onEdit,
 }: {
   data: PortalData;
   search: string;
-  actorUid: string;
   canManageAccess: boolean;
+  canEditData: boolean;
   onEdit: (person: Person) => void;
 }) {
   const [filter, setFilter] = useState("todos");
@@ -1316,9 +1358,8 @@ function PeoplePage({
                     <button
                       className="button button-small"
                       onClick={() => onEdit(person)}
-                      disabled={!canManageAccess && person.uid === actorUid}
                     >
-                      {person.uid === actorUid && !canManageAccess ? "Seu cadastro" : "Editar"}
+                      {canEditData || canManageAccess ? "Editar" : "Visualizar"}
                     </button>
                   </td>
                 </tr>
@@ -1577,11 +1618,15 @@ function SmallGroupsPage({
   data,
   search,
   canManagePg,
+  isAdministrator,
+  onConfigure,
   onEditLeaders,
 }: {
   data: PortalData;
   search: string;
   canManagePg: boolean;
+  isAdministrator: boolean;
+  onConfigure: () => void;
   onEditLeaders: (group: SmallGroup) => void;
 }) {
   const searchTerm = search.toLocaleLowerCase("pt-BR");
@@ -1597,6 +1642,21 @@ function SmallGroupsPage({
 
   return (
     <>
+      {isAdministrator ? (
+        <section className="panel pg-setup-banner">
+          <div>
+            <h2>PGs oficiais</h2>
+            <p>
+              Configura Asa Norte, Asa Sul, Guará e Lago Norte com os dias,
+              horários e líderes informados. Depois, vincule as contas dos
+              líderes em cada grupo.
+            </p>
+          </div>
+          <button className="button button-primary" onClick={onConfigure}>
+            Configurar os quatro PGs
+          </button>
+        </section>
+      ) : null}
       <div className="family-grid">
         {groups.map((group) => {
           const records = data.presencasPg.filter(
@@ -1703,6 +1763,7 @@ function PgRequestsPage({
       groups.find((group) => group.id === request.grupoId)?.nome ?? "";
     return (
       request.status === "pendente" &&
+      request.tipo !== "informacoes" &&
       `${request.nome} ${groupName}`
         .toLocaleLowerCase("pt-BR")
         .includes(search.toLocaleLowerCase("pt-BR"))
@@ -2055,6 +2116,7 @@ function PersonForm({
   person,
   actorUid,
   canManageAccess,
+  canEditData,
   families,
   onCancel,
   onSave,
@@ -2062,6 +2124,7 @@ function PersonForm({
   person: Person;
   actorUid: string;
   canManageAccess: boolean;
+  canEditData: boolean;
   families: Family[];
   onCancel: () => void;
   onSave: (value: Pick<Person, "nome" | "telefone" | "endereco" | "dataNascimento" | "estadoCivil" | "familiaId" | "pequenoGrupoId" | "salaEbdId" | "ministerios" | "perfil" | "ativo" | "funcoes"> & { membroDesde: string }) => Promise<void>;
@@ -2137,6 +2200,7 @@ function PersonForm({
     <form className="portal-form" onSubmit={submit}>
       <ModalHeading eyebrow="CADASTRO INDIVIDUAL" title="Editar pessoa" description="Atualize os dados cadastrais permitidos para este perfil." />
       <div className="form-grid">
+        <fieldset className="person-data-fields" disabled={!canEditData}>
         <label className="field field-span"><span>Nome completo</span><input value={nome} onChange={(event) => setNome(event.target.value)} maxLength={120} required /></label>
         <label className="field"><span>E-mail</span><input type="email" value={person.email} disabled /></label>
         <label className="field"><span>Telefone</span><input value={telefone} onChange={(event) => setTelefone(event.target.value)} maxLength={40} /></label>
@@ -2148,16 +2212,33 @@ function PersonForm({
         <label className="field"><span>Sala EBD (ID)</span><input value={salaEbdId} onChange={(event) => setSalaEbdId(event.target.value)} maxLength={128} /></label>
         <label className="field"><span>Ministérios</span><input value={ministerios} onChange={(event) => setMinisterios(event.target.value)} placeholder="Separados por vírgula" /></label>
         <label className="field"><span>Membro desde</span><input type="date" value={membroDesde} onChange={(event) => setMembroDesde(event.target.value)} /></label>
+        </fieldset>
         {canManageAccess ? (
           <>
             <label className="field"><span>Perfil</span><select value={perfil} onChange={(event) => setPerfil(event.target.value as Person["perfil"])}><option value="VISITANTE">Visitante</option><option value="MEMBRO">Membro</option><option value="ADMINISTRADOR">Administrador</option></select></label>
             <label className="field-check"><input type="checkbox" checked={ativo} onChange={(event) => setAtivo(event.target.checked)} /><span>Cadastro ativo</span></label>
             <fieldset className="field field-span access-functions" disabled={!mayChangeFunctions}>
               <legend>Funções de acesso</legend>
-              {(["SECRETARIA", "PASTORAL", "TESOURARIA"] as const).map((functionName) => (
+              {([
+                "SECRETARIA",
+                "PASTORAL",
+                "TESOURARIA",
+                "PASTOR_TITULAR",
+                "VICE_PASTOR",
+                "PRESBITERO",
+              ] as const).map((functionName) => (
                 <label className="field-check" key={functionName}>
                   <input type="checkbox" checked={funcoes.includes(functionName)} onChange={() => toggleFunction(functionName)} />
-                  <span>{functionName === "SECRETARIA" ? "Secretaria" : functionName === "PASTORAL" ? "Pastoral" : "Tesouraria"}</span>
+                  <span>
+                    {{
+                      SECRETARIA: "Secretaria",
+                      PASTORAL: "Pastoral",
+                      TESOURARIA: "Tesouraria",
+                      PASTOR_TITULAR: "Pastor titular",
+                      VICE_PASTOR: "Vice-pastor",
+                      PRESBITERO: "Presbítero",
+                    }[functionName]}
+                  </span>
                 </label>
               ))}
               {!mayChangeFunctions ? <small>Não é permitido alterar as próprias funções.</small> : null}
@@ -2166,7 +2247,13 @@ function PersonForm({
         ) : null}
       </div>
       {error ? <p className="form-error">{error}</p> : null}
-      <ModalActions onCancel={onCancel} saving={saving} submitLabel="Salvar alterações" />
+      {canEditData || canManageAccess ? (
+        <ModalActions onCancel={onCancel} saving={saving} submitLabel="Salvar alterações" />
+      ) : (
+        <div className="modal-actions">
+          <button type="button" className="button button-secondary" onClick={onCancel}>Fechar</button>
+        </div>
+      )}
     </form>
   );
 }

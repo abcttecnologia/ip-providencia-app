@@ -1,7 +1,13 @@
 import type { Timestamp } from "firebase/firestore";
 
 export type UserProfile = "VISITANTE" | "MEMBRO" | "ADMINISTRADOR";
-export type UserFunction = "SECRETARIA" | "PASTORAL" | "TESOURARIA";
+export type UserFunction =
+  | "SECRETARIA"
+  | "PASTORAL"
+  | "TESOURARIA"
+  | "PASTOR_TITULAR"
+  | "VICE_PASTOR"
+  | "PRESBITERO";
 export type RecordTarget = "pessoa" | "familia";
 export type HistoryKind = "admissao" | "batismo" | "transferencia" | "observacao";
 export type VisitStatus = "agendada" | "realizada" | "cancelada";
@@ -115,7 +121,9 @@ export interface PgRequest {
   uid: string;
   nome: string;
   grupoId: string;
-  status: "pendente" | "aprovada" | "recusada";
+  tipo?: "informacoes" | "participacao";
+  resposta?: string;
+  status: "pendente" | "aprovada" | "recusada" | "respondida";
   criadoEm?: Timestamp;
 }
 

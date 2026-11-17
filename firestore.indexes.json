@@ -1,0 +1,19 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "solicitacoesPg",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "grupoId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

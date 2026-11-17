@@ -105,7 +105,9 @@ export interface SolicitacaoPg {
   uid: string;
   nome: string;
   grupoId: string;
-  status: 'pendente' | 'aprovada' | 'recusada';
+  tipo?: 'informacoes' | 'participacao';
+  resposta?: string;
+  status: 'pendente' | 'aprovada' | 'recusada' | 'respondida';
   criadoEm?: DataFirestore;
   atualizadoEm?: DataFirestore;
 }

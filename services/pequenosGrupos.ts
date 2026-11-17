@@ -108,13 +108,13 @@ export async function getMyPgRequests(): Promise<SolicitacaoPg[]> {
     );
 }
 
-export async function requestToJoinPg(groupId: string) {
+export async function requestPgInformation(groupId: string) {
   const uid = auth.currentUser?.uid;
-  if (!uid) throw new Error('Entre na sua conta para solicitar participação.');
+  if (!uid) throw new Error('Entre na sua conta para pedir informações.');
 
   const user = await getUser(uid);
   if (!user?.ativo || user.perfil !== 'MEMBRO') {
-    throw new Error('A solicitação está disponível para membros cadastrados.');
+    throw new Error('O pedido de informações está disponível para membros cadastrados.');
   }
   if (user.pequenoGrupoId) {
     throw new Error('Você já participa de um Pequeno Grupo.');
@@ -125,16 +125,17 @@ export async function requestToJoinPg(groupId: string) {
     throw new Error('Este Pequeno Grupo não está disponível.');
   }
 
-  const requestId = `${groupId}_${uid}`;
+  const requestId = `${groupId}_${uid}_informacoes`;
   const requestRef = doc(db, 'solicitacoesPg', requestId);
   if ((await getDoc(requestRef)).exists()) {
-    throw new Error('Você já enviou uma solicitação para este grupo.');
+    throw new Error('Você já pediu informações sobre este grupo.');
   }
 
   await setDoc(requestRef, {
     uid,
     nome: user.nome,
     grupoId: groupId,
+    tipo: 'informacoes',
     status: 'pendente',
     criadoEm: serverTimestamp(),
     atualizadoEm: serverTimestamp(),
@@ -178,6 +179,29 @@ export async function updatePgRequestStatus(
     });
   }
   await batch.commit();
+}
+
+export async function replyToPgInformationRequest(
+  request: SolicitacaoPg,
+  reply: string,
+) {
+  if (!auth.currentUser?.uid) {
+    throw new Error('Entre na sua conta para responder ao pedido.');
+  }
+  if (request.tipo !== 'informacoes' || request.status !== 'pendente') {
+    throw new Error('Este pedido de informações não está mais pendente.');
+  }
+
+  const text = reply.trim();
+  if (!text || text.length > 2000) {
+    throw new Error('A resposta deve ter entre 1 e 2000 caracteres.');
+  }
+
+  await updateDoc(doc(db, 'solicitacoesPg', request.id), {
+    status: 'respondida',
+    resposta: text,
+    atualizadoEm: serverTimestamp(),
+  });
 }
 
 export async function getPgParticipants(

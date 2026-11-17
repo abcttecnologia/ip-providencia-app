@@ -67,8 +67,14 @@ exports.notifyPgLeaders = onDocumentCreated(
         body: JSON.stringify(
           batch.map(({ token }) => ({
             to: token,
-            title: 'Novo pedido para participar do PG',
-            body: `${request.nome} quer participar de ${group.nome ?? 'seu grupo'}.`,
+            title:
+              request.tipo === 'informacoes'
+                ? 'Pedido de informações sobre o PG'
+                : 'Novo pedido para participar do PG',
+            body:
+              request.tipo === 'informacoes'
+                ? `${request.nome} quer saber mais sobre ${group.nome ?? 'seu grupo'}.`
+                : `${request.nome} quer participar de ${group.nome ?? 'seu grupo'}.`,
             data: {
               screen: 'pequenosGrupos',
               grupoId: request.grupoId,

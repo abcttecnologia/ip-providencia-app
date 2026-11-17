@@ -1,7 +1,13 @@
 import type { DataFirestore } from "./firestore";
 
 export type UserProfile = "VISITANTE" | "MEMBRO" | "ADMINISTRADOR";
-export type UserFunction = "SECRETARIA" | "PASTORAL" | "TESOURARIA";
+export type UserFunction =
+  | "SECRETARIA"
+  | "PASTORAL"
+  | "TESOURARIA"
+  | "PASTOR_TITULAR"
+  | "VICE_PASTOR"
+  | "PRESBITERO";
 
 export interface LgpdConsent {
   versao: "1.0";

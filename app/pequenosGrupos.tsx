@@ -17,6 +17,7 @@ import RefreshableScroll from '../components/ui/RefreshableScroll';
 import Screen from '../components/ui/Screen';
 import ScreenLoader from '../components/ui/ScreenLoader';
 import { useCurrentUserProfile } from '../hooks/useCurrentUserProfile';
+import { getEventos, type GoogleCalendarEvent } from '../services/calendar';
 import { getPedidosDoMeuPg } from '../services/pedidosOracao';
 import {
   getMeuPequenoGrupo,
@@ -26,7 +27,8 @@ import {
   getMyPgRequests,
   getPequenosGrupos,
   removePgParticipant,
-  requestToJoinPg,
+  replyToPgInformationRequest,
+  requestPgInformation,
   savePgAttendance,
   updatePgRequestStatus,
 } from '../services/pequenosGrupos';
@@ -42,7 +44,41 @@ function todayInput() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function nextMeetingLabel(group: PequenoGrupo) {
+function nextMeetingLabel(
+  group: PequenoGrupo,
+  events: GoogleCalendarEvent[],
+) {
+  const searchTerms = [group.nome, group.bairro]
+    .filter((term): term is string => Boolean(term))
+    .map(normalizeText)
+    .filter((term) => term.length >= 3);
+  const now = Date.now();
+  const calendarEvent = events
+    .filter((event) =>
+      searchTerms.some((term) => normalizeText(event.summary).includes(term)),
+    )
+    .map((event) => ({ event, date: calendarEventDate(event) }))
+    .filter(
+      (entry): entry is { event: GoogleCalendarEvent; date: Date } =>
+        Boolean(entry.date && entry.date.getTime() >= now),
+    )
+    .sort((left, right) => left.date.getTime() - right.date.getTime())[0];
+
+  if (calendarEvent) {
+    return `Próximo encontro: ${new Intl.DateTimeFormat('pt-BR', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      timeZone: 'America/Sao_Paulo',
+    }).format(calendarEvent.date)}${calendarEvent.event.start.dateTime
+      ? ` • ${new Intl.DateTimeFormat('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'America/Sao_Paulo',
+        }).format(calendarEvent.date)}`
+      : ''}`;
+  }
+
   if (!group.diaSemana) return 'Próximo encontro: data a combinar';
 
   const weekdays = [
@@ -89,9 +125,29 @@ function nextMeetingLabel(group: PequenoGrupo) {
   return `Próximo encontro: ${dateLabel}${group.horario ? ` • ${group.horario}` : ''}`;
 }
 
+function normalizeText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function calendarEventDate(event: GoogleCalendarEvent) {
+  if (event.start.dateTime) {
+    const date = new Date(event.start.dateTime);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (event.start.date) {
+    const [year, month, day] = event.start.date.split('-').map(Number);
+    return new Date(year, month - 1, day, 12);
+  }
+  return null;
+}
+
 export default function PequenosGruposScreen() {
   const { user, loading: profileLoading } = useCurrentUserProfile();
   const [groups, setGroups] = useState<PequenoGrupo[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<GoogleCalendarEvent[]>([]);
   const [myGroup, setMyGroup] = useState<PequenoGrupo | null>(null);
   const [myRequests, setMyRequests] = useState<SolicitacaoPg[]>([]);
   const [participants, setParticipants] = useState<ParticipantePg[]>([]);
@@ -109,12 +165,14 @@ export default function PequenosGruposScreen() {
 
   const loadGroups = useCallback(async () => {
     try {
-      const [availableGroups, personalGroup, requests] = await Promise.all([
+      const [availableGroups, personalGroup, requests, calendarResult] = await Promise.all([
         getPequenosGrupos(),
         user?.ativo ? getMeuPequenoGrupo() : Promise.resolve(null),
         getMyPgRequests(),
+        getEventos(),
       ]);
       setGroups(availableGroups);
+      setCalendarEvents(calendarResult.data);
       setMyGroup(personalGroup);
       setMyRequests(requests);
 
@@ -161,18 +219,42 @@ export default function PequenosGruposScreen() {
     void Promise.resolve().then(loadGroups);
   }, [profileLoading, loadGroups]);
 
-  async function handleJoin(group: PequenoGrupo) {
+  async function handleInformationRequest(group: PequenoGrupo) {
     setBusyId(group.id);
     try {
-      await requestToJoinPg(group.id);
+      await requestPgInformation(group.id);
       await loadGroups();
-      Alert.alert('Solicitação enviada', 'O líder do grupo receberá seu pedido.');
+      Alert.alert(
+        'Pedido enviado',
+        'Os líderes do grupo receberam seu pedido de informações.',
+      );
     } catch (requestError) {
       Alert.alert(
-        'Não foi possível solicitar',
+        'Não foi possível pedir informações',
         requestError instanceof Error
           ? requestError.message
           : 'Tente novamente mais tarde.',
+      );
+    } finally {
+      setBusyId('');
+    }
+  }
+
+  async function handleInformationReply(
+    request: SolicitacaoPg,
+    reply: string,
+  ) {
+    setBusyId(request.id);
+    try {
+      await replyToPgInformationRequest(request, reply);
+      await loadGroups();
+      Alert.alert('Resposta enviada', 'A pessoa verá sua resposta no aplicativo.');
+    } catch (actionError) {
+      Alert.alert(
+        'Não foi possível responder',
+        actionError instanceof Error
+          ? actionError.message
+          : 'Verifique sua conexão e tente novamente.',
       );
     } finally {
       setBusyId('');
@@ -276,7 +358,9 @@ export default function PequenosGruposScreen() {
   const isLeader =
     Boolean(myGroup && user?.uid && myGroup.liderUids?.includes(user.uid));
   const requestByGroup = new Map(
-    myRequests.map((request) => [request.grupoId, request]),
+    myRequests
+      .filter((request) => request.tipo === 'informacoes')
+      .map((request) => [request.grupoId, request]),
   );
   const canRequest = user?.ativo && user.perfil === 'MEMBRO' && !user.pequenoGrupoId;
 
@@ -298,7 +382,9 @@ export default function PequenosGruposScreen() {
             <Text style={styles.sectionTitle}>Meu PG</Text>
             <AppCard>
               <Text style={styles.groupName}>{myGroup.nome}</Text>
-              <Text style={styles.nextMeeting}>{nextMeetingLabel(myGroup)}</Text>
+              <Text style={styles.nextMeeting}>
+                {nextMeetingLabel(myGroup, calendarEvents)}
+              </Text>
               {myGroup.local ? (
                 <InfoRow label="Local" value={myGroup.local} />
               ) : null}
@@ -369,8 +455,20 @@ export default function PequenosGruposScreen() {
                   pendingRequests.map((request) => (
                     <AppCard key={request.id}>
                       <Text style={styles.groupName}>{request.nome}</Text>
-                      <Text style={styles.mutedText}>Solicitação pendente</Text>
-                      <View style={styles.actionRow}>
+                      <Text style={styles.mutedText}>
+                        {request.tipo === 'informacoes'
+                          ? 'Pediu mais informações sobre o grupo'
+                          : 'Pedido para participar do grupo'}
+                      </Text>
+                      {request.tipo === 'informacoes' ? (
+                        <PgInformationReply
+                          busy={busyId === request.id}
+                          onSubmit={(reply) =>
+                            void handleInformationReply(request, reply)
+                          }
+                        />
+                      ) : (
+                        <View style={styles.actionRow}>
                         <Pressable
                           style={[styles.actionButton, styles.approveButton]}
                           disabled={busyId === request.id}
@@ -386,6 +484,7 @@ export default function PequenosGruposScreen() {
                           <Text style={styles.rejectText}>Recusar</Text>
                         </Pressable>
                       </View>
+                      )}
                     </AppCard>
                   ))
                 ) : (
@@ -468,10 +567,24 @@ export default function PequenosGruposScreen() {
                 {group.diaSemana ? (
                   <InfoRow label="Dia" value={group.diaSemana} />
                 ) : null}
+                {group.lideres ? (
+                  <InfoRow label="Líderes" value={group.lideres} />
+                ) : null}
                 {group.horario ? (
                   <InfoRow label="Horário" value={group.horario} />
                 ) : null}
+                <Text style={styles.nextMeeting}>
+                  {nextMeetingLabel(group, calendarEvents)}
+                </Text>
                 {group.local ? <InfoRow label="Local" value={group.local} /> : null}
+                {request?.tipo === 'informacoes' &&
+                request.status === 'respondida' &&
+                request.resposta ? (
+                  <View style={styles.infoReply}>
+                    <Text style={styles.infoReplyTitle}>Resposta dos líderes</Text>
+                    <Text style={styles.requestText}>{request.resposta}</Text>
+                  </View>
+                ) : null}
                 {canRequest && !isMyGroup ? (
                   <View style={styles.saveButton}>
                     <AppButton
@@ -479,16 +592,16 @@ export default function PequenosGruposScreen() {
                         busyId === group.id
                           ? 'Enviando...'
                           : request?.status === 'pendente'
-                            ? 'Solicitação enviada'
-                            : request?.status === 'recusada'
-                              ? 'Solicitação recusada'
-                              : 'Quero participar'
+                            ? 'Pedido enviado'
+                            : request?.status === 'respondida'
+                              ? 'Informações recebidas'
+                              : 'Quero mais informações'
                       }
-                      onPress={() => void handleJoin(group)}
+                      onPress={() => void handleInformationRequest(group)}
                       disabled={
                         busyId === group.id ||
                         request?.status === 'pendente' ||
-                        request?.status === 'recusada'
+                        request?.status === 'respondida'
                       }
                     />
                   </View>
@@ -522,6 +635,36 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <Text style={styles.infoLabel}>{label}: </Text>
       {value}
     </Text>
+  );
+}
+
+function PgInformationReply({
+  busy,
+  onSubmit,
+}: {
+  busy: boolean;
+  onSubmit: (reply: string) => void;
+}) {
+  const [reply, setReply] = useState('');
+  return (
+    <View>
+      <TextInput
+        value={reply}
+        onChangeText={setReply}
+        placeholder="Escreva as informações para a pessoa"
+        multiline
+        maxLength={2000}
+        style={styles.replyInput}
+        accessibilityLabel="Resposta ao pedido de informações do PG"
+      />
+      <View style={styles.saveButton}>
+        <AppButton
+          title={busy ? 'Enviando...' : 'Enviar informações'}
+          onPress={() => onSubmit(reply)}
+          disabled={busy || !reply.trim()}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -576,6 +719,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginTop: 12,
+  },
+  replyInput: {
+    backgroundColor: '#F7F9F7',
+    borderColor: '#DCE5DE',
+    borderRadius: 10,
+    borderWidth: 1,
+    color: '#33443A',
+    minHeight: 90,
+    padding: 12,
+    textAlignVertical: 'top',
+  },
+  infoReply: {
+    backgroundColor: '#EEF5EF',
+    borderRadius: 8,
+    marginTop: 10,
+    padding: 12,
+  },
+  infoReplyTitle: {
+    color: '#1E5631',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 6,
   },
   participantRow: {
     alignItems: 'center',

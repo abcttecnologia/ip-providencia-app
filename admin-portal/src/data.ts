@@ -91,8 +91,28 @@ function mapCollection<T extends { id?: string; uid?: string }>(
 }
 
 export async function loadPortalData(
-  options: { pastoral: boolean; exclusionRequests: boolean },
+  options: {
+    pastoral: boolean;
+    exclusionRequests: boolean;
+    membersOnly?: boolean;
+  },
 ): Promise<PortalData> {
+  if (options.membersOnly) {
+    return {
+      pessoas: await mapCollection<Person>("users", "uid"),
+      familias: [],
+      historico: [],
+      visitas: [],
+      acompanhamentos: [],
+      pedidosOracao: [],
+      pequenosGrupos: [],
+      solicitacoesPg: [],
+      presencasPg: [],
+      participantesPg: [],
+      solicitacoesExclusao: [],
+    };
+  }
+
   const [
     pessoas,
     familias,
@@ -269,6 +289,97 @@ export async function saveSmallGroupLeaders(
   await batch.commit();
 }
 
+export async function configureDefaultSmallGroups(
+  existingGroups: SmallGroup[],
+  actor: PortalActor,
+) {
+  if (actor.perfil !== "ADMINISTRADOR") {
+    throw new Error("Somente a administração pode configurar os PGs oficiais.");
+  }
+
+  const defaults = [
+    {
+      nome: "Asa Norte",
+      bairro: "Asa Norte",
+      lideres: "Pr. Miguel e Asenath",
+      diaSemana: "Quarta-feira",
+      horario: "19h30",
+    },
+    {
+      nome: "Asa Sul",
+      bairro: "Asa Sul",
+      lideres: "Rev. Quaresma e Elciane",
+      diaSemana: "Quarta-feira",
+      horario: "19h30",
+    },
+    {
+      nome: "Guará",
+      bairro: "Guará",
+      lideres: "Kaio e Lara",
+      diaSemana: "Quarta-feira",
+      horario: "19h30",
+    },
+    {
+      nome: "Lago Norte",
+      bairro: "Lago Norte",
+      lideres: "Thiago e Adriana",
+      diaSemana: "Sexta-feira",
+      horario: "19h30",
+    },
+  ];
+
+  const batch = writeBatch(db);
+  const usedGroupIds = new Set<string>();
+  for (const group of defaults) {
+    const key = normalizePgLocation(group.nome);
+    const matches = existingGroups.filter((candidate) =>
+      [candidate.nome, candidate.bairro]
+        .filter((value): value is string => Boolean(value))
+        .some((value) => normalizePgLocation(value).includes(key)),
+    );
+    if (matches.length > 1 || (matches[0] && usedGroupIds.has(matches[0].id))) {
+      throw new Error(
+        `Há mais de um cadastro correspondente ao PG ${group.nome}. Resolva os duplicados antes da configuração.`,
+      );
+    }
+
+    const existing = matches[0];
+    const groupRef = existing
+      ? doc(db, "pequenosGrupos", existing.id)
+      : doc(collection(db, "pequenosGrupos"));
+    usedGroupIds.add(groupRef.id);
+    batch.set(
+      groupRef,
+      {
+        ...group,
+        ativo: true,
+        atualizadoEm: serverTimestamp(),
+        ...(existing ? {} : { criadoEm: serverTimestamp() }),
+      },
+      { merge: true },
+    );
+    batch.set(
+      doc(collection(db, "auditoria")),
+      auditRecord(
+        existing ? "editar" : "criar",
+        "pequenosGrupos",
+        groupRef.id,
+        actor,
+      ),
+    );
+  }
+
+  await batch.commit();
+}
+
+function normalizePgLocation(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
 export async function updatePgRequest(
   request: PgRequest,
   status: Extract<PgRequest["status"], "aprovada" | "recusada">,
@@ -437,26 +548,28 @@ export async function updatePerson(
     }
 
     const updates: Record<string, unknown> = {
-      nome: changes.nome,
-      telefone: changes.telefone,
-      endereco: changes.endereco,
-      dataNascimento: changes.dataNascimento,
-      estadoCivil: changes.estadoCivil,
-      familiaId: nextFamilyId,
-      pequenoGrupoId: changes.pequenoGrupoId ?? null,
-      salaEbdId: changes.salaEbdId ?? null,
-      ministerios: changes.ministerios ?? [],
       atualizadoEm: serverTimestamp(),
     };
-    if (changes.membroDesde) {
-      updates.membroDesde = toTimestamp(changes.membroDesde);
-    } else if (
-      changes.perfil === "MEMBRO" &&
-      currentUser.perfil !== "MEMBRO"
-    ) {
-      updates.membroDesde = serverTimestamp();
-    } else if (changes.membroDesde === "") {
-      updates.membroDesde = deleteField();
+    if (actor.funcoes?.includes("SECRETARIA")) {
+      updates.nome = changes.nome;
+      updates.telefone = changes.telefone;
+      updates.endereco = changes.endereco;
+      updates.dataNascimento = changes.dataNascimento;
+      updates.estadoCivil = changes.estadoCivil;
+      updates.familiaId = nextFamilyId;
+      updates.pequenoGrupoId = changes.pequenoGrupoId ?? null;
+      updates.salaEbdId = changes.salaEbdId ?? null;
+      updates.ministerios = changes.ministerios ?? [];
+      if (changes.membroDesde) {
+        updates.membroDesde = toTimestamp(changes.membroDesde);
+      } else if (
+        changes.perfil === "MEMBRO" &&
+        currentUser.perfil !== "MEMBRO"
+      ) {
+        updates.membroDesde = serverTimestamp();
+      } else if (changes.membroDesde === "") {
+        updates.membroDesde = deleteField();
+      }
     }
 
     if (actor.perfil === "ADMINISTRADOR") {

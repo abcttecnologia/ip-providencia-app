@@ -43,6 +43,15 @@ service cloud.firestore {
       return hasFuncao('TESOURARIA');
     }
 
+    function isMemberViewer() {
+      return isAdmin()
+        || isSecretaria()
+        || isPastoral()
+        || hasFuncao('PASTOR_TITULAR')
+        || hasFuncao('VICE_PASTOR')
+        || hasFuncao('PRESBITERO');
+    }
+
     function isStaff() {
       return isAdmin() || isSecretaria() || isPastoral() || isTesouraria();
     }
@@ -162,11 +171,14 @@ service cloud.firestore {
       return !data.keys().hasAny(['funcoes'])
         || (
           data.funcoes is list
-          && data.funcoes.size() <= 3
+          && data.funcoes.size() <= 6
           && data.funcoes.hasOnly([
             'SECRETARIA',
             'PASTORAL',
-            'TESOURARIA'
+            'TESOURARIA',
+            'PASTOR_TITULAR',
+            'VICE_PASTOR',
+            'PRESBITERO'
           ])
         );
     }
@@ -220,7 +232,11 @@ service cloud.firestore {
       return existsAfter(pgRequestPath(uid, grupoId))
         && getAfter(pgRequestPath(uid, grupoId)).data.uid == uid
         && getAfter(pgRequestPath(uid, grupoId)).data.grupoId == grupoId
-        && getAfter(pgRequestPath(uid, grupoId)).data.status == 'aprovada';
+        && getAfter(pgRequestPath(uid, grupoId)).data.status == 'aprovada'
+        && (
+          !getAfter(pgRequestPath(uid, grupoId)).data.keys().hasAny(['tipo'])
+          || getAfter(pgRequestPath(uid, grupoId)).data.tipo == 'participacao'
+        );
     }
 
     function pendingLgpdRequest(uid) {
@@ -486,6 +502,7 @@ service cloud.firestore {
           'uid',
           'nome',
           'grupoId',
+          'tipo',
           'status',
           'criadoEm',
           'atualizadoEm'
@@ -494,6 +511,7 @@ service cloud.firestore {
           'uid',
           'nome',
           'grupoId',
+          'tipo',
           'status',
           'criadoEm',
           'atualizadoEm'
@@ -503,6 +521,7 @@ service cloud.firestore {
         && data.nome.size() > 0
         && data.nome.size() <= 120
         && data.grupoId == grupoId
+        && data.tipo in ['informacoes', 'participacao']
         && data.status == 'pendente'
         && data.criadoEm == request.time
         && data.atualizadoEm == request.time;
@@ -665,8 +684,8 @@ service cloud.firestore {
 
 
     match /users/{uid} {
-      allow get: if (signedIn() && request.auth.uid == uid) || isCareStaff();
-      allow list: if isCareStaff();
+      allow get: if (signedIn() && request.auth.uid == uid) || isMemberViewer();
+      allow list: if isMemberViewer();
       allow create: if signedIn()
         && request.auth.uid == uid
         && !exists(deletionRequestPath(uid))
@@ -728,7 +747,7 @@ service cloud.firestore {
           && validConsent(request.resource.data)
         )
         || (
-          isCareStaff()
+          isSecretaria()
           && request.auth.uid != uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'nome',
@@ -750,16 +769,6 @@ service cloud.firestore {
           isAdmin()
           && request.auth.uid != uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'nome',
-            'telefone',
-            'endereco',
-            'dataNascimento',
-            'estadoCivil',
-            'familiaId',
-            'pequenoGrupoId',
-            'salaEbdId',
-            'ministerios',
-            'membroDesde',
             'perfil',
             'ativo',
             'funcoes',
@@ -772,16 +781,6 @@ service cloud.firestore {
           isAdmin()
           && request.auth.uid == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'nome',
-            'telefone',
-            'endereco',
-            'dataNascimento',
-            'estadoCivil',
-            'familiaId',
-            'pequenoGrupoId',
-            'salaEbdId',
-            'ministerios',
-            'membroDesde',
             'perfil',
             'ativo',
             'atualizadoEm'
@@ -872,7 +871,18 @@ service cloud.firestore {
         && request.resource.data.grupoId is string
         && exists(smallGroupPath(request.resource.data.grupoId))
         && get(smallGroupPath(request.resource.data.grupoId)).data.ativo == true
-        && solicitacaoId == request.resource.data.grupoId + '_' + request.auth.uid
+        && (
+          (
+            request.resource.data.tipo == 'informacoes'
+            && solicitacaoId
+              == request.resource.data.grupoId + '_' + request.auth.uid + '_informacoes'
+          )
+          || (
+            request.resource.data.tipo == 'participacao'
+            && solicitacaoId
+              == request.resource.data.grupoId + '_' + request.auth.uid
+          )
+        )
         && validPgRequest(
           request.resource.data,
           request.auth.uid,
@@ -884,14 +894,33 @@ service cloud.firestore {
         && resource.data.status == 'pendente'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status',
-          'atualizadoEm'
+          'atualizadoEm',
+          'resposta'
         ])
-        && request.resource.data.status in ['aprovada', 'recusada']
         && request.resource.data.atualizadoEm == request.time
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.grupoId == resource.data.grupoId
+        && request.resource.data.get('tipo', 'participacao')
+          == resource.data.get('tipo', 'participacao')
         && request.resource.data.nome == resource.data.nome
         && request.resource.data.criadoEm == resource.data.criadoEm
+        && (
+          (
+            resource.data.get('tipo', 'participacao') == 'informacoes'
+            && request.resource.data.status == 'respondida'
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasAll(['status', 'atualizadoEm', 'resposta'])
+            && request.resource.data.resposta is string
+            && request.resource.data.resposta.size() > 0
+            && request.resource.data.resposta.size() <= 2000
+          )
+          || (
+            resource.data.get('tipo', 'participacao') == 'participacao'
+            && request.resource.data.status in ['aprovada', 'recusada']
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'atualizadoEm'])
+          )
+        )
         && (
           isCareStaff()
           || resource.data.uid != request.auth.uid
