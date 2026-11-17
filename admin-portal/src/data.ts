@@ -103,7 +103,7 @@ export async function loadPortalData(
   if (options.membersOnly) {
     return {
       pessoas: await mapCollection<Person>("users", "uid"),
-      familias: [],
+      familias: await mapCollection<Family>("familias", "id"),
       historico: [],
       visitas: [],
       acompanhamentos: [],

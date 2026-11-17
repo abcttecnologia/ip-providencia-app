@@ -1162,13 +1162,13 @@ service cloud.firestore {
     }
 
     match /familias/{familiaId} {
-      allow get: if isCareStaff()
+      allow get: if isMemberViewer()
         || (
           signedIn()
           && hasUserProfile()
           && currentUser().familiaId == familiaId
         );
-      allow list: if isCareStaff();
+      allow list: if isMemberViewer();
       allow create, update, delete: if isCareStaff();
     }
 

@@ -709,6 +709,7 @@ function AdminPortal({
     if (key === "tesouraria") return hasFunction(profile, "TESOURARIA");
     if (key === "dashboard") return canViewMembers;
     if (key === "pessoas") return canViewMembers;
+    if (key === "familias") return canViewMembers;
     if (key === "acompanhamentos" || key === "pedidosOracao") return canViewPastoral;
     if (key === "solicitacoesPg") return canManagePg;
     if (key === "pequenosGrupos") return canCare;
@@ -735,6 +736,7 @@ function AdminPortal({
       (page === "tesouraria" && hasFunction(profile, "TESOURARIA")) ||
       (page === "dashboard" && canViewMembers) ||
       (page === "pessoas" && canViewMembers) ||
+      (page === "familias" && canViewMembers) ||
       ((page === "acompanhamentos" || page === "pedidosOracao") && canViewPastoral) ||
       (page === "solicitacoesPg" && canManagePg) ||
       (page === "pequenosGrupos" && canCare) ||
@@ -744,6 +746,7 @@ function AdminPortal({
       (page !== "tesouraria" &&
       page !== "dashboard" &&
       page !== "pessoas" &&
+      page !== "familias" &&
         page !== "acompanhamentos" &&
         page !== "pedidosOracao" &&
         page !== "pequenosGrupos" &&
@@ -898,7 +901,7 @@ function AdminPortal({
             </div>
             <div className="page-heading-actions">
               {refreshing ? <span className="refresh-indicator"><LoaderCircle className="spin" size={16} /> Atualizando</span> : null}
-              {page === "familias" ? <button className="button button-primary" onClick={() => setModal({ kind: "family", family: null })}><Plus size={17} /> Nova família</button> : null}
+              {page === "familias" && canCare ? <button className="button button-primary" onClick={() => setModal({ kind: "family", family: null })}><Plus size={17} /> Nova família</button> : null}
               {page === "visitas" ? <button className="button button-primary" onClick={() => setModal({ kind: "visit", visit: null })}><Plus size={17} /> Registrar visita</button> : null}
               {page === "acompanhamentos" ? <button className="button button-primary" onClick={() => setModal({ kind: "followup", followup: null })}><Plus size={17} /> Novo acompanhamento</button> : null}
               {page === "historico" ? <button className="button button-primary" onClick={() => setModal({ kind: "history", history: null })}><Plus size={17} /> Novo registro</button> : null}
@@ -922,6 +925,7 @@ function AdminPortal({
             <FamiliesPage
               data={data}
               search={query}
+              canEdit={canCare}
               onEdit={(family) => setModal({ kind: "family", family })}
             />
           ) : null}
@@ -1099,6 +1103,7 @@ function AdminPortal({
             <FamilyForm
               family={modal.family}
               data={data}
+              canEdit={canCare}
               onCancel={() => setModal(null)}
               onSave={(family) =>
                 runAction(
@@ -1602,10 +1607,12 @@ function PeoplePage({
 function FamiliesPage({
   data,
   search,
+  canEdit,
   onEdit,
 }: {
   data: PortalData;
   search: string;
+  canEdit: boolean;
   onEdit: (family: Family) => void;
 }) {
   const families = data.familias.filter((family) =>
@@ -1619,7 +1626,7 @@ function FamiliesPage({
           .filter((person): person is Person => Boolean(person));
         return (
           <article className="family-card" key={family.id}>
-            <div className="family-card-top"><div className="family-icon"><House size={20} /></div><button className="button button-small" onClick={() => onEdit(family)}>Editar</button></div>
+            <div className="family-card-top"><div className="family-icon"><House size={20} /></div><button className="button button-small" onClick={() => onEdit(family)}>{canEdit ? "Editar" : "Visualizar"}</button></div>
             <h2>{family.nome}</h2><p>{members.length} membro(s) vinculado(s)</p>
             <div className="family-members">
               {members.slice(0, 4).map((member) => <PersonAvatar person={member} small key={member.uid} />)}
@@ -2772,11 +2779,13 @@ function MinistryRequestsPage({
 function FamilyForm({
   family,
   data,
+  canEdit,
   onCancel,
   onSave,
 }: {
   family: Family | null;
   data: PortalData;
+  canEdit: boolean;
   onCancel: () => void;
   onSave: (value: Pick<Family, "nome" | "membrosUids">) => Promise<void>;
 }) {
@@ -2810,13 +2819,17 @@ function FamilyForm({
 
   return (
     <form className="portal-form" onSubmit={submit}>
-      <ModalHeading eyebrow="NÚCLEO FAMILIAR" title={family ? "Editar família" : "Nova família"} description="Vincule pessoas do cadastro a este núcleo familiar." />
-      <label className="field"><span>Nome da família</span><input value={nome} onChange={(event) => setNome(event.target.value)} maxLength={100} required /></label>
+      <ModalHeading
+        eyebrow="NÚCLEO FAMILIAR"
+        title={family ? (canEdit ? "Editar família" : "Visualizar família") : "Nova família"}
+        description={canEdit ? "Vincule pessoas do cadastro a este núcleo familiar." : "Visualização somente leitura."}
+      />
+      <label className="field"><span>Nome da família</span><input value={nome} onChange={(event) => setNome(event.target.value)} maxLength={100} required disabled={!canEdit} /></label>
       <div className="member-picker-heading"><strong>Membros</strong><span>{members.length} selecionado(s)</span></div>
       <div className="member-picker">
         {data.pessoas.filter((person) => person.ativo).map((person) => (
           <label className="member-option" key={person.uid}>
-            <input type="checkbox" checked={members.includes(person.uid)} onChange={() => toggleMember(person.uid)} />
+            <input type="checkbox" checked={members.includes(person.uid)} onChange={() => toggleMember(person.uid)} disabled={!canEdit} />
             <span className="avatar avatar-small">{firstName(person.nome).slice(0, 1).toUpperCase()}</span>
             <span className="member-option-copy"><strong>{person.nome}</strong><small>{person.email}</small></span>
             {person.familiaId && person.familiaId !== family?.id && !members.includes(person.uid) ? <small className="muted">em outra família</small> : null}
@@ -2825,7 +2838,13 @@ function FamilyForm({
         {!data.pessoas.length ? <p className="muted">Cadastre pessoas antes de criar um núcleo familiar.</p> : null}
       </div>
       {error ? <p className="form-error">{error}</p> : null}
-      <ModalActions onCancel={onCancel} saving={saving} submitLabel={family ? "Salvar família" : "Criar família"} />
+      {canEdit ? (
+        <ModalActions onCancel={onCancel} saving={saving} submitLabel={family ? "Salvar família" : "Criar família"} />
+      ) : (
+        <div className="modal-actions">
+          <button type="button" className="button button-secondary" onClick={onCancel}>Fechar</button>
+        </div>
+      )}
     </form>
   );
 }
