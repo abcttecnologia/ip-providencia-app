@@ -1,10 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import * as ImagePicker from "expo-image-picker";
 import {
   Alert,
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -22,7 +20,6 @@ import RefreshableScroll from "../../components/ui/RefreshableScroll";
 import Screen from "../../components/ui/Screen";
 import ScreenLoader from "../../components/ui/ScreenLoader";
 import { useCurrentUserProfile } from "../../hooks/useCurrentUserProfile";
-import { uploadProfilePhoto } from "../../services/profilePhoto";
 import type { AccessOption } from "../../services/userService";
 import {
   getUserAccessOptions,
@@ -167,6 +164,15 @@ function getOptionLabel(options: AccessOption[], id: string) {
   return options.find((option) => option.id === id)?.nome ?? id;
 }
 
+const AVATAR_COLORS = ["#5B8C85", "#7A9E75", "#A67C52", "#6F86A5", "#9A7AA0"];
+
+function avatarColor(name: string) {
+  const hash = Array.from(name).reduce((total, character) => {
+    return ((total * 31) + character.charCodeAt(0)) >>> 0;
+  }, 0);
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
 function PersonalProfileForm({
   user,
   onSaved,
@@ -181,13 +187,11 @@ function PersonalProfileForm({
     formatarDataNascimento(user.dataNascimento ?? ""),
   );
   const [estadoCivil, setEstadoCivil] = useState(user.estadoCivil ?? "");
-  const [fotoUrl, setFotoUrl] = useState(user.fotoUrl ?? "");
   const [saving, setSaving] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showCivilStatus, setShowCivilStatus] = useState(false);
 
   async function saveProfile() {
-    if (saving || uploadingPhoto) return;
+    if (saving) return;
     if (!nome.trim()) {
       Alert.alert("Confira seus dados", "Informe seu nome.");
       return;
@@ -199,7 +203,6 @@ function PersonalProfileForm({
       endereco: endereco.trim(),
       dataNascimento: dataNascimento.trim(),
       estadoCivil: estadoCivil.trim(),
-      fotoUrl: fotoUrl.trim(),
     };
 
     setSaving(true);
@@ -218,104 +221,19 @@ function PersonalProfileForm({
     }
   }
 
-  async function savePhoto(asset: ImagePicker.ImagePickerAsset) {
-    setUploadingPhoto(true);
-    try {
-      const photoUrl = await uploadProfilePhoto(
-        user.uid,
-        asset.uri,
-        asset.mimeType,
-      );
-      await updateOwnProfile(user.uid, { fotoUrl: photoUrl });
-      setFotoUrl(photoUrl);
-      onSaved();
-      Alert.alert("Foto atualizada", "Sua foto de perfil foi salva.");
-    } catch (error) {
-      console.error("Falha ao salvar foto do perfil:", error);
-      Alert.alert(
-        "Não foi possível salvar a foto",
-        error instanceof Error
-          ? error.message
-          : "Verifique sua conexão e tente novamente.",
-      );
-    } finally {
-      setUploadingPhoto(false);
-    }
-  }
-
-  async function pickFromGallery() {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.75,
-      });
-
-      if (!result.canceled) await savePhoto(result.assets[0]);
-    } catch (error) {
-      console.error("Falha ao escolher foto da galeria:", error);
-      Alert.alert(
-        "Não foi possível abrir a galeria",
-        "Tente novamente em alguns instantes.",
-      );
-    }
-  }
-
-  async function takePhoto() {
-    try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert(
-          "Permissão da câmera",
-          "Permita o acesso à câmera nas configurações do celular para tirar uma foto.",
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.75,
-      });
-
-      if (!result.canceled) await savePhoto(result.assets[0]);
-    } catch (error) {
-      console.error("Falha ao tirar foto do perfil:", error);
-      Alert.alert(
-        "Não foi possível abrir a câmera",
-        "Tente novamente em alguns instantes.",
-      );
-    }
-  }
-
-  function choosePhoto() {
-    Alert.alert("Foto do perfil", "Escolha de onde deseja enviar sua foto.", [
-      { text: "Galeria", onPress: () => void pickFromGallery() },
-      { text: "Câmera", onPress: () => void takePhoto() },
-      { text: "Cancelar", style: "cancel" },
-    ]);
-  }
-
   return (
     <>
       <View style={styles.photoSection}>
-        {fotoUrl ? (
-          <Image
-            source={{ uri: fotoUrl }}
-            style={styles.profilePhoto}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.profilePhoto, styles.photoPlaceholder]}>
-            <Ionicons name="person-outline" size={40} color="#546B5F" />
-          </View>
-        )}
-        <AppButton
-          title={uploadingPhoto ? "Enviando foto..." : "Escolher foto"}
-          onPress={choosePhoto}
-          disabled={saving || uploadingPhoto}
-        />
+        <View
+          style={[
+            styles.profilePhoto,
+            { backgroundColor: avatarColor(nome || user.nome) },
+          ]}
+        >
+          <Text style={styles.profileInitial}>
+            {nome.trim().slice(0, 1).toUpperCase() || "?"}
+          </Text>
+        </View>
       </View>
 
       <Text style={styles.sectionTitle}>Dados pessoais</Text>
@@ -345,7 +263,7 @@ function PersonalProfileForm({
       <Text style={styles.label}>Estado civil</Text>
       <Pressable
         onPress={() => setShowCivilStatus(true)}
-        disabled={saving || uploadingPhoto}
+        disabled={saving}
         style={styles.selector}
       >
         <Text style={styles.selectorText}>
@@ -356,7 +274,7 @@ function PersonalProfileForm({
       <AppButton
         title={saving ? "Salvando..." : "Salvar meus dados"}
         onPress={saveProfile}
-        disabled={saving || uploadingPhoto}
+        disabled={saving}
       />
       <SelectionModal
         visible={showCivilStatus}
@@ -780,11 +698,13 @@ const styles = StyleSheet.create({
     height: 104,
     borderRadius: 52,
     marginBottom: 14,
-  },
-  photoPlaceholder: {
-    backgroundColor: "#E1E9DE",
     alignItems: "center",
     justifyContent: "center",
+  },
+  profileInitial: {
+    color: "#FFFFFF",
+    fontSize: 36,
+    fontWeight: "800",
   },
   sectionTitle: {
     color: "#023411",

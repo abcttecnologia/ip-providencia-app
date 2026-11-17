@@ -7,8 +7,6 @@ import {
   getReactNativePersistence,
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
-import { getFunctions } from 'firebase/functions';
 
 import { requireEnv } from './env';
 
@@ -25,10 +23,6 @@ const firebaseConfig = {
   projectId: requireEnv(
     'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
     process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  ),
-  storageBucket: requireEnv(
-    'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
-    process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
   ),
   messagingSenderId: requireEnv(
     'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
@@ -63,5 +57,3 @@ function initializeFirebaseAuth() {
 
 export const db = getFirestore(app);
 export const auth = initializeFirebaseAuth();
-export const storage = getStorage(app);
-export const functions = getFunctions(app);

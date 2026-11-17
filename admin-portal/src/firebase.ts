@@ -25,11 +25,6 @@ export const firebaseConfig = {
     import.meta.env.VITE_FIREBASE_PROJECT_ID ??
       import.meta.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
   ),
-  storageBucket: required(
-    "VITE_FIREBASE_STORAGE_BUCKET or EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET",
-    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ??
-      import.meta.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  ),
   messagingSenderId: required(
     "VITE_FIREBASE_MESSAGING_SENDER_ID or EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
     import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ??

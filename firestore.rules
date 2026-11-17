@@ -964,12 +964,20 @@ service cloud.firestore {
         allow get, list: if isCareStaff()
           || isLiderDoPg(grupoId)
           || isSmallGroupParticipant(grupoId);
-        allow create, update, delete: if false;
+        allow create, update: if isLiderDoPg(grupoId)
+          && uid is string
+          && request.resource.data.nome is string
+          && request.resource.data.nome.size() <= 120
+          && request.resource.data.fotoUrl is string;
+        allow delete: if isLiderDoPg(grupoId) && uid is string;
       }
 
       match /participantesMeta/{uid} {
         allow get, list: if isCareStaff();
-        allow create, update, delete: if false;
+        allow create, update: if isLiderDoPg(grupoId)
+          && uid is string
+          && request.resource.data.ingressoEm == request.time;
+        allow delete: if isLiderDoPg(grupoId) && uid is string;
       }
     }
 

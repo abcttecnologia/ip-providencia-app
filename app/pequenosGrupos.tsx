@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import {
   Alert,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -42,6 +41,16 @@ import type {
 function todayInput() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+const AVATAR_COLORS = ['#5B8C85', '#7A9E75', '#A67C52', '#6F86A5', '#9A7AA0'];
+
+function avatarColor(name: string) {
+  const hash = Array.from(name).reduce(
+    (total, character) => ((total * 31) + character.charCodeAt(0)) >>> 0,
+    0,
+  );
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
 function nextMeetingLabel(
@@ -388,18 +397,16 @@ export default function PequenosGruposScreen() {
               {participants.length ? (
                 participants.map((participant) => (
                   <View key={participant.uid} style={styles.participantRow}>
-                    {participant.fotoUrl ? (
-                      <Image
-                        source={{ uri: participant.fotoUrl }}
-                        style={styles.avatar}
-                      />
-                    ) : (
-                      <View style={[styles.avatar, styles.avatarFallback]}>
-                        <Text style={styles.avatarInitial}>
-                          {participant.nome.slice(0, 1).toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
+                    <View
+                      style={[
+                        styles.avatar,
+                        { backgroundColor: avatarColor(participant.nome) },
+                      ]}
+                    >
+                      <Text style={styles.avatarInitial}>
+                        {participant.nome.slice(0, 1).toUpperCase()}
+                      </Text>
+                    </View>
                     <Text style={styles.participantName}>{participant.nome}</Text>
                     {isLeader && participant.uid !== user?.uid ? (
                       <Pressable

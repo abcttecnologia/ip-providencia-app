@@ -10,7 +10,6 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
 
 import type {
   DataFirestore,
@@ -19,7 +18,7 @@ import type {
   PresencaPg,
   SolicitacaoPg,
 } from '../types/firestore';
-import { auth, db, functions } from './firebase';
+import { auth, db } from './firebase';
 import { getUser } from './userService';
 
 export type PequenoGrupoInput = Omit<
@@ -143,6 +142,33 @@ export async function requestPgParticipation(groupId: string) {
     criadoEm: serverTimestamp(),
     atualizadoEm: serverTimestamp(),
   });
+
+  const group = groupSnapshot.data();
+  if (Array.isArray(group.liderUids) && group.liderUids.length) {
+    const tokenSnapshot = await getDocs(
+      query(collection(db, 'pushTokens'), where('uid', 'in', group.liderUids)),
+    );
+    const tokens = tokenSnapshot.docs
+      .filter((token) => token.data().ativo === true)
+      .map((token) => token.id);
+    if (tokens.length) {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(tokens.map((token) => ({
+          to: token,
+          title: 'Novo pedido para participar do PG',
+          body: `${user.nome} quer participar de ${group.nome ?? 'seu grupo'}.`,
+          data: { screen: 'pequenosGrupos', grupoId: groupId },
+        }))),
+      }).catch((error) => {
+        console.error('Não foi possível enviar a notificação do PG:', error);
+      });
+    }
+  }
 }
 
 export async function getPendingPgRequests(
@@ -182,6 +208,15 @@ export async function updatePgRequestStatus(
       pequenoGrupoId: request.grupoId,
       atualizadoEm: serverTimestamp(),
     });
+    batch.set(doc(db, 'pequenosGrupos', request.grupoId, 'participantes', request.uid), {
+      nome: request.nome,
+      fotoUrl: '',
+    });
+    batch.set(
+      doc(db, 'pequenosGrupos', request.grupoId, 'participantesMeta', request.uid),
+      { ingressoEm: serverTimestamp() },
+      { merge: true },
+    );
   }
   await batch.commit();
 }
@@ -189,8 +224,37 @@ export async function updatePgRequestStatus(
 export async function getPgParticipants(
   groupId: string,
 ): Promise<ParticipantePg[]> {
-  const ensureRoster = httpsCallable(functions, 'ensurePgRoster');
-  await ensureRoster({ grupoId: groupId });
+  const group = await getDoc(doc(db, 'pequenosGrupos', groupId));
+  const currentUid = auth.currentUser?.uid;
+  if (
+    currentUid &&
+    group.exists() &&
+    Array.isArray(group.data().liderUids) &&
+    group.data().liderUids.includes(currentUid)
+  ) {
+    const members = await getDocs(
+      query(collection(db, 'users'), where('pequenoGrupoId', '==', groupId)),
+    );
+    const batch = writeBatch(db);
+    members.docs
+      .filter((member) => {
+        const data = member.data();
+        return data.ativo === true && data.perfil === 'MEMBRO';
+      })
+      .forEach((member) => {
+        const data = member.data();
+        batch.set(doc(db, 'pequenosGrupos', groupId, 'participantes', member.id), {
+          nome: typeof data.nome === 'string' ? data.nome : 'Nome não informado',
+          fotoUrl: typeof data.fotoUrl === 'string' ? data.fotoUrl : '',
+        });
+        batch.set(
+          doc(db, 'pequenosGrupos', groupId, 'participantesMeta', member.id),
+          { ingressoEm: data.pequenoGrupoDesde ?? serverTimestamp() },
+          { merge: true },
+        );
+      });
+    await batch.commit();
+  }
 
   const snapshot = await getDocs(
     collection(db, 'pequenosGrupos', groupId, 'participantes'),
@@ -207,10 +271,19 @@ export async function getPgParticipants(
 }
 
 export async function removePgParticipant(uid: string) {
-  await updateDoc(doc(db, 'users', uid), {
+  const user = await getDoc(doc(db, 'users', uid));
+  const groupId = user.data()?.pequenoGrupoId;
+  if (typeof groupId !== 'string') {
+    throw new Error('Esta pessoa não pertence a um Pequeno Grupo.');
+  }
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'users', uid), {
     pequenoGrupoId: null,
     atualizadoEm: serverTimestamp(),
   });
+  batch.delete(doc(db, 'pequenosGrupos', groupId, 'participantes', uid));
+  batch.delete(doc(db, 'pequenosGrupos', groupId, 'participantesMeta', uid));
+  await batch.commit();
 }
 
 export async function getPgAttendance(

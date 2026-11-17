@@ -179,6 +179,16 @@ function firstName(name: string | undefined) {
   return name?.trim().split(/\s+/)[0] || "Administrador";
 }
 
+const AVATAR_COLORS = ["#5B8C85", "#7A9E75", "#A67C52", "#6F86A5", "#9A7AA0"];
+
+function avatarColor(name: string) {
+  const hash = Array.from(name).reduce(
+    (total, character) => ((total * 31) + character.charCodeAt(0)) >>> 0,
+    0,
+  );
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
 function formatDate(value: string) {
   const date = value ? new Date(`${value}T12:00:00`) : null;
   return date && !Number.isNaN(date.getTime())
@@ -2326,12 +2336,9 @@ function PersonAvatar({ person, small = false }: { person: Person; small?: boole
     <span
       className={`avatar ${small ? "avatar-small" : ""}`}
       title={name}
+      style={{ backgroundColor: avatarColor(name), color: "#FFFFFF" }}
     >
-      {person.fotoUrl ? (
-        <img src={person.fotoUrl} alt="" />
-      ) : (
-        name.slice(0, 1).toUpperCase()
-      )}
+      {name.slice(0, 1).toUpperCase()}
     </span>
   );
 }
