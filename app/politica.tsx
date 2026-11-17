@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 
-// TODO: texto pendente de aprovação da igreja.
+const PRIVACY_URL =
+  'https://igrejapresbiterianaprovidencia-arch.github.io/boletins-igreja/privacy.html';
+
 export default function PoliticaScreen() {
   return (
     <>
@@ -53,67 +55,29 @@ export default function PoliticaScreen() {
             paddingBottom: 40,
           }}
         >
-          <Text
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#023411', marginBottom: 12 }}>
+            Resumo
+          </Text>
+          <Text style={{ fontSize: 12, lineHeight: 22, color: '#444', marginBottom: 24 }}>
+            Coletamos e utilizamos apenas dados necessários para cadastro, acesso,
+            comunicação pastoral e funcionamento dos recursos da igreja. Não vendemos
+            dados pessoais. Notificações e integrações podem receber informações
+            estritamente relacionadas ao uso solicitado.
+          </Text>
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => void Linking.openURL(PRIVACY_URL)}
             style={{
-              fontSize: 16,
-              fontWeight: '700',
-              color: '#023411',
-              marginBottom: 16,
+              backgroundColor: '#023411',
+              borderRadius: 8,
+              alignItems: 'center',
+              paddingVertical: 14,
             }}
           >
-            Igreja Presbiteriana Providência
-          </Text>
-
-          <Text
-            style={{
-              fontSize: 12,
-              lineHeight: 24,
-              color: '#444',
-            }}
-          >
-            Este aplicativo foi desenvolvido para auxiliar os membros e visitantes
-            da Igreja Presbiteriana Providência.
-
-            {'\n\n'}
-
-            O aplicativo não comercializa informações pessoais e utiliza apenas
-            os dados estritamente necessários para o funcionamento de seus recursos.
-
-            {'\n\n'}
-
-            Algumas funcionalidades podem direcionar o usuário para serviços de
-            terceiros, como YouTube, Instagram, Google Maps e WhatsApp. Cada um
-            desses serviços possui sua própria Política de Privacidade.
-
-            {'\n\n'}
-
-            O aplicativo poderá utilizar notificações para comunicar avisos,
-            eventos e informações da igreja.
-
-            {'\n\n'}
-
-            Nenhum dado pessoal é vendido ou compartilhado para fins comerciais.
-
-            {'\n\n'}
-
-            Em caso de dúvidas, entre em contato:
-
-            {'\n\n'}
-
-            igrejapresbiterianaprovidencia@gmail.com
-
-            {'\n\n'}
-
-            Desenvolvido por:
-
-            Igreja Presbiteriana Providência
-
-            abcttecnologia@gmail.com
-
-            {'\n\n'}
-
-            Última atualização: Julho de 2026.
-          </Text>
+            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>
+              Ler a política completa
+            </Text>
+          </Pressable>
         </ScrollView>
       </View>
     </>
