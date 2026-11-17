@@ -1,8 +1,11 @@
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 import { router } from "expo-router";
 import { useEffect, useRef } from "react";
-import { Animated, Image, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native";
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                import { onAuthStateChanged } from "firebase/auth";
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                import { Alert, Animated, Image, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native";
 
 import { Theme } from "@/constants/theme";
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                import { auth } from "@/services/firebase";
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                import { logout } from "@/services/auth";
 
 // ─── Animated Button Component ────────────────────────────────────────────────
 interface AnimatedButtonProps {
@@ -80,6 +83,43 @@ export default function WelcomeScreen() {
     ]).start();
   }, []);
 
+  useEffect(
+    () =>
+      onAuthStateChanged(auth, (user) => {
+        if (user) router.replace("/(tabs)");
+      }),
+    [],
+  );
+
+  function continueAsVisitor() {
+    if (auth.currentUser) {
+      Alert.alert(
+        "Continuar como visitante?",
+        "Você vai sair da sua conta neste aparelho. Continuar?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Continuar",
+            style: "destructive",
+            onPress: () => {
+              void logout()
+                .then(() => router.replace("/(tabs)"))
+                .catch((error) => {
+                  console.error("Erro ao sair da conta:", error);
+                  Alert.alert(
+                    "Não foi possível sair",
+                    "Tente novamente em alguns instantes.",
+                  );
+                });
+            },
+          },
+        ],
+      );
+      return;
+    }
+    router.replace("/(tabs)");
+  }
+
   return (
     <View style={styles.container}>
       {/* Decorative top accent */}
@@ -137,7 +177,7 @@ export default function WelcomeScreen() {
           <View style={styles.visitorDivider} />
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => router.replace("/(tabs)")}
+            onPress={continueAsVisitor}
           >
             <Text style={styles.visitorText}>
               Continuar como visitante

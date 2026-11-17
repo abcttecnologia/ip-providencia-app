@@ -133,20 +133,30 @@ export default function ConfiguracoesScreen() {
 
   async function signOut() {
     if (signingOut) return;
-
-    setSigningOut(true);
-    try {
-      await logout();
-      router.replace('/welcome');
-    } catch (error) {
-      console.error('Erro ao sair da conta:', error);
-      Alert.alert(
-        'Não foi possível sair',
-        'Tente novamente em alguns instantes.',
-      );
-    } finally {
-      setSigningOut(false);
-    }
+    Alert.alert(
+      'Sair da conta?',
+      'Você será desconectado neste aparelho e os dados pessoais serão removidos da memória local.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Sair',
+          style: 'destructive',
+          onPress: () => {
+            setSigningOut(true);
+            void logout()
+              .then(() => router.replace('/welcome'))
+              .catch((error) => {
+                console.error('Erro ao sair da conta:', error);
+                Alert.alert(
+                  'Não foi possível sair',
+                  'Tente novamente em alguns instantes.',
+                );
+              })
+              .finally(() => setSigningOut(false));
+          },
+        },
+      ],
+    );
   }
 
   return (

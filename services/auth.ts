@@ -10,6 +10,7 @@ import { auth } from './firebase';
 
 import { ensureUserProfile } from "./userService";
 import { desativarNotificacoes } from './notificacoes';
+import { limparCache } from './cache';
 
 export async function register(
   nome: string,
@@ -57,5 +58,6 @@ export async function logout() {
     console.error('Não foi possível desativar o token de notificações:', error);
   }
 
-  return signOut(auth);
+  await signOut(auth);
+  await limparCache();
 }
