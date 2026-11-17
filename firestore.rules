@@ -296,6 +296,47 @@ service cloud.firestore {
         && data.em == request.time;
     }
 
+    function validSentNotification(data) {
+      return data.keys().hasAll([
+          'titulo',
+          'mensagem',
+          'publico',
+          'alvoId',
+          'enviadoPor',
+          'enviadoEm',
+          'total',
+          'sucesso',
+          'falhas'
+        ])
+        && data.keys().hasOnly([
+          'titulo',
+          'mensagem',
+          'publico',
+          'alvoId',
+          'enviadoPor',
+          'enviadoEm',
+          'total',
+          'sucesso',
+          'falhas'
+        ])
+        && data.titulo is string
+        && data.titulo.size() > 0
+        && data.titulo.size() <= 120
+        && data.mensagem is string
+        && data.mensagem.size() > 0
+        && data.mensagem.size() <= 4000
+        && data.publico in ['todos', 'membros', 'ministerio', 'pg']
+        && (
+          data.publico in ['todos', 'membros']
+          || data.alvoId is string
+        )
+        && data.enviadoPor == request.auth.uid
+        && data.enviadoEm == request.time
+        && data.total is int
+        && data.sucesso is int
+        && data.falhas is int;
+    }
+
     function validDeletionRequest(uid, data) {
       return data.keys().hasAll([
           'uid',
@@ -731,13 +772,13 @@ service cloud.firestore {
     }
 
     match /pushTokens/{tokenId} {
-      allow read: if isAdmin() || ownsToken(resource.data);
+      allow read: if isAdmin() || isSecretaria() || ownsToken(resource.data);
       allow create: if isAdmin() || (
         ownsToken(request.resource.data)
         && validPushToken(request.resource.data)
         && request.resource.data.ativo == true
       );
-      allow update: if isAdmin() || (
+      allow update: if isAdmin() || isSecretaria() || (
         ownsToken(request.resource.data)
         && validPushToken(request.resource.data)
       );
@@ -1290,10 +1331,17 @@ service cloud.firestore {
       }
     }
 
+    match /notificacoesEnviadas/{notificationId} {
+      allow get, list: if isAdmin() || isSecretaria();
+      allow create: if (isAdmin() || isSecretaria())
+        && validSentNotification(request.resource.data);
+      allow update, delete: if false;
+    }
+
     match /auditoria/{auditId} {
       allow create: if isStaff()
         && validAudit(request.resource.data);
-      allow get, list: if isAdmin();
+      allow get, list: if isAdmin() || isSecretaria();
       allow update, delete: if false;
     }
 

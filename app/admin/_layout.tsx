@@ -15,7 +15,11 @@ export default function AdminLayout() {
     );
   }
 
-  if (user?.ativo !== true || user.perfil !== "ADMINISTRADOR") {
+  const canSend =
+    user?.ativo === true &&
+    (user.perfil === "ADMINISTRADOR" ||
+      user.funcoes?.includes("SECRETARIA"));
+  if (!canSend) {
     return <Redirect href="/(tabs)" />;
   }
 

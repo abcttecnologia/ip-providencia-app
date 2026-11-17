@@ -16,7 +16,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Theme } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { auth } from '@/services/firebase';
-import { registrarNotificacoes } from '@/services/notificacoes';
+import {
+  configureNotificationResponseListener,
+  registrarNotificacoes,
+} from '@/services/notificacoes';
 import { aceitarConsentimentoLgpd } from '@/services/userService';
 import { useCurrentUserProfile } from '@/hooks/useCurrentUserProfile';
 import {
@@ -48,6 +51,11 @@ export default function RootLayout() {
       : '';
   const policyIsOpen = pathname === '/politica';
   const currentUid = auth.currentUser?.uid ?? null;
+
+  useEffect(() => {
+    const subscription = configureNotificationResponseListener();
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (!currentUid) return;

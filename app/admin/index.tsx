@@ -131,6 +131,12 @@ export default function AdminDashboardScreen() {
           description="Atualize perfis e vínculos com ministérios, PGs e EBD."
           onPress={() => router.push("/perfil")}
         />
+        <ActionCard
+          icon="notifications-outline"
+          title="Enviar notificação"
+          description="Envie comunicados para todos, membros, ministérios ou PGs."
+          onPress={() => router.push("/admin/notificacoes")}
+        />
       </RefreshableScroll>
     </Screen>
   );

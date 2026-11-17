@@ -85,7 +85,10 @@ export default function ComunhaoScreen() {
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const isAdmin = user?.ativo === true && user.perfil === 'ADMINISTRADOR';
+  const canManageContent =
+    user?.ativo === true &&
+    (user.perfil === 'ADMINISTRADOR' ||
+      user.funcoes?.includes('SECRETARIA'));
 
   const loadLinks = useCallback(async () => {
     const result = await getLinks();
@@ -237,7 +240,7 @@ export default function ComunhaoScreen() {
           ))}
         </View>
 
-        {isAdmin ? (
+        {canManageContent ? (
           <Pressable
             accessibilityRole="button"
             onPress={() => router.push('/admin')}

@@ -32,6 +32,10 @@ import {
   type EventoInput,
 } from "../../services/eventos";
 import type { Evento, Publico } from "../../types/firestore";
+import {
+  getNotificationRecipientCount,
+  sendPushNotification,
+} from "../../services/notificacoes";
 
 type ContentKind = "aviso" | "evento";
 
@@ -76,6 +80,7 @@ export default function AdminContentScreen() {
   const [imagem, setImagem] = useState("");
   const [tipoEvento, setTipoEvento] = useState("");
   const [ordem, setOrdem] = useState("0");
+  const [notificarAgora, setNotificarAgora] = useState(false);
 
   function loadContent() {
     Promise.all([getAvisos(), getEventos()])
@@ -113,6 +118,7 @@ export default function AdminContentScreen() {
     setImagem("");
     setTipoEvento("");
     setOrdem("0");
+    setNotificarAgora(false);
     setError("");
   }
 
@@ -164,6 +170,7 @@ export default function AdminContentScreen() {
     setSaving(true);
     setError("");
     try {
+      let savedId: string | null = editingId;
       if (kind === "aviso") {
         const notice: AvisoInput = {
           titulo: titulo.trim(),
@@ -175,7 +182,7 @@ export default function AdminContentScreen() {
           alvoId: isTargetedAudience(publico) ? alvoId.trim() : null,
         };
         if (editingId) await updateAviso(editingId, notice);
-        else await createAviso(notice);
+        else savedId = (await createAviso(notice)).id;
       } else {
         const event: EventoInput = {
           titulo: titulo.trim(),
@@ -191,7 +198,41 @@ export default function AdminContentScreen() {
           ordem: Number.parseInt(ordem, 10) || 0,
         };
         if (editingId) await updateEvento(editingId, event);
-        else await createEvento(event);
+        else savedId = (await createEvento(event)).id;
+      }
+
+      if (notificarAgora) {
+        const audienceId = isTargetedAudience(publico) ? alvoId.trim() : null;
+        const count = await getNotificationRecipientCount(publico, audienceId);
+        Alert.alert(
+          "Confirmar envio",
+          `Enviar para ${count} ${count === 1 ? "pessoa" : "pessoas"}?`,
+          [
+            { text: "Cancelar", style: "cancel" },
+            {
+              text: "Enviar",
+              onPress: () =>
+                void sendPushNotification({
+                  titulo: titulo.trim(),
+                  mensagem: descricao.trim() || titulo.trim(),
+                  publico,
+                  alvoId: audienceId,
+                  screen: kind === "aviso" ? "avisos" : "eventos",
+                  alvoRouteId: savedId,
+                }).then((result) =>
+                  Alert.alert(
+                    "Envio concluído",
+                    `${result.sucesso} enviadas, ${result.falhas} falhas.`,
+                  ),
+                ).catch((sendError) =>
+                  Alert.alert(
+                    "Não foi possível enviar",
+                    sendError instanceof Error ? sendError.message : "Tente novamente.",
+                  ),
+                ),
+            },
+          ],
+        );
       }
 
       resetForm();
@@ -440,6 +481,19 @@ export default function AdminContentScreen() {
               />
             </>
           ) : null}
+
+          <Pressable
+            onPress={() => setNotificarAgora((current) => !current)}
+            style={styles.toggle}
+            disabled={saving}
+          >
+            <Ionicons
+              name={notificarAgora ? "checkbox" : "square-outline"}
+              size={22}
+              color="#1E5631"
+            />
+            <Text style={styles.toggleLabel}>Notificar agora</Text>
+          </Pressable>
 
           <FormError message={error} />
           <AppButton
