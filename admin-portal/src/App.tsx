@@ -1,5 +1,13 @@
-import { onAuthStateChanged, signInWithEmailAndPassword, type User } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  createUserWithEmailAndPassword,
+  deleteUser,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+  type User,
+} from "firebase/auth";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import {
   Activity,
   AlertTriangle,
@@ -387,6 +395,9 @@ function LoadingPage({ message }: { message: string }) {
 function LoginPage({ accessError }: { accessError: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [mode, setMode] = useState<"login" | "create" | "reset">("login");
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -397,6 +408,50 @@ function LoginPage({ accessError }: { accessError: string }) {
     setError("");
 
     try {
+      if (mode === "reset") {
+        auth.languageCode = "pt-BR";
+        await sendPasswordResetEmail(auth, email.trim());
+        setError("Enviamos um link de recuperação para seu e-mail.");
+        setMode("login");
+        return;
+      }
+      if (mode === "create") {
+        if (!name.trim()) {
+          setError("Informe seu nome.");
+          return;
+        }
+        if (!acceptedPrivacy) {
+          setError("É necessário aceitar a Política de Privacidade.");
+          return;
+        }
+        const credential = await createUserWithEmailAndPassword(
+          auth,
+          email.trim(),
+          password,
+        );
+        try {
+          await setDoc(doc(db, "users", credential.user.uid), {
+            uid: credential.user.uid,
+            email: credential.user.email ?? email.trim(),
+            nome: name.trim(),
+            perfil: "VISITANTE",
+            ativo: true,
+            ministerios: [],
+            consentimentoLgpd: {
+              versao: "1.0",
+              aceitoEm: serverTimestamp(),
+            },
+            criadoEm: serverTimestamp(),
+            atualizadoEm: serverTimestamp(),
+          });
+        } catch (profileError) {
+          await deleteUser(credential.user);
+          throw profileError;
+        }
+        await signOut(auth);
+        setError("Conta criada. Aguarde uma função autorizada no portal.");
+        return;
+      }
       await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (loginError) {
       console.error("Falha ao entrar no portal:", loginError);
@@ -429,10 +484,34 @@ function LoginPage({ accessError }: { accessError: string }) {
         </div>
         <div className="login-copy">
           <span className="eyebrow">ACESSO RESTRITO</span>
-          <h1>Bem-vindo de volta</h1>
-          <p>Entre com sua conta autorizada para continuar.</p>
+          <h1>
+            {mode === "create"
+              ? "Criar conta"
+              : mode === "reset"
+                ? "Esqueci minha senha"
+                : "Bem-vindo de volta"}
+          </h1>
+          <p>
+            {mode === "create"
+              ? "A conta nascerá como visitante e aguardará uma função autorizada."
+              : mode === "reset"
+                ? "Informe seu e-mail para receber o link de recuperação."
+                : "Entre com sua conta autorizada para continuar."}
+          </p>
         </div>
         <form className="login-form" onSubmit={submit}>
+          {mode === "create" ? (
+            <>
+              <label htmlFor="login-name">Nome</label>
+              <input
+                id="login-name"
+                autoComplete="name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                required
+              />
+            </>
+          ) : null}
           <label htmlFor="login-email">E-mail</label>
           <input
             id="login-email"
@@ -442,21 +521,68 @@ function LoginPage({ accessError }: { accessError: string }) {
             onChange={(event) => setEmail(event.target.value)}
             required
           />
-          <label htmlFor="login-password">Senha</label>
-          <input
-            id="login-password"
-            autoComplete="current-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
+          {mode !== "reset" ? (
+            <>
+              <label htmlFor="login-password">Senha</label>
+              <input
+                id="login-password"
+                autoComplete={mode === "create" ? "new-password" : "current-password"}
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                minLength={6}
+              />
+            </>
+          ) : null}
+          {mode === "create" ? (
+            <label className="login-consent">
+              <input
+                type="checkbox"
+                checked={acceptedPrivacy}
+                onChange={(event) => setAcceptedPrivacy(event.target.checked)}
+              />
+              <span>
+                Li e concordo com a{" "}
+                <a
+                  href="https://igrejapresbiterianaprovidencia-arch.github.io/boletins-igreja/privacy.html"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Política de Privacidade
+                </a>
+                .
+              </span>
+            </label>
+          ) : null}
           {error || accessError ? <p className="form-error">{error || accessError}</p> : null}
           <button className="button button-primary login-submit" disabled={saving}>
             {saving ? <LoaderCircle className="spin" size={17} /> : null}
-            {saving ? "Entrando..." : "Entrar no portal"}
+            {saving
+              ? "Aguarde..."
+              : mode === "create"
+                ? "Criar conta"
+                : mode === "reset"
+                  ? "Enviar link"
+                  : "Entrar no portal"}
           </button>
         </form>
+        <div className="login-actions">
+          {mode !== "login" ? (
+            <button type="button" onClick={() => { setMode("login"); setError(""); }}>
+              Voltar ao login
+            </button>
+          ) : (
+            <>
+              <button type="button" onClick={() => { setMode("create"); setError(""); }}>
+                Criar conta
+              </button>
+              <button type="button" onClick={() => { setMode("reset"); setError(""); }}>
+                Esqueci minha senha
+              </button>
+            </>
+          )}
+        </div>
         <p className="login-footnote"><ShieldCheck size={15} /> Acesso protegido para equipe autorizada</p>
       </section>
       <aside className="login-art">

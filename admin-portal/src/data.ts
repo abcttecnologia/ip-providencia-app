@@ -509,6 +509,19 @@ export async function updatePgRequest(
         pequenoGrupoId: request.grupoId,
         atualizadoEm: serverTimestamp(),
       });
+        transaction.set(
+          doc(db, "pequenosGrupos", request.grupoId, "participantes", request.uid),
+          {
+            nome: request.nome,
+            fotoUrl: "",
+          },
+        );
+        transaction.set(
+          doc(db, "pequenosGrupos", request.grupoId, "participantesMeta", request.uid),
+          {
+            ingressoEm: serverTimestamp(),
+          },
+        );
       transaction.set(
         userAuditRef,
         auditRecord("editar", "users", request.uid, actor),

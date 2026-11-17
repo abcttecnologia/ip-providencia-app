@@ -142,33 +142,6 @@ export async function requestPgParticipation(groupId: string) {
     criadoEm: serverTimestamp(),
     atualizadoEm: serverTimestamp(),
   });
-
-  const group = groupSnapshot.data();
-  if (Array.isArray(group.liderUids) && group.liderUids.length) {
-    const tokenSnapshot = await getDocs(
-      query(collection(db, 'pushTokens'), where('uid', 'in', group.liderUids)),
-    );
-    const tokens = tokenSnapshot.docs
-      .filter((token) => token.data().ativo === true)
-      .map((token) => token.id);
-    if (tokens.length) {
-      await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(tokens.map((token) => ({
-          to: token,
-          title: 'Novo pedido para participar do PG',
-          body: `${user.nome} quer participar de ${group.nome ?? 'seu grupo'}.`,
-          data: { screen: 'pequenosGrupos', grupoId: groupId },
-        }))),
-      }).catch((error) => {
-        console.error('Não foi possível enviar a notificação do PG:', error);
-      });
-    }
-  }
 }
 
 export async function getPendingPgRequests(

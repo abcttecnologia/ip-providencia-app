@@ -447,7 +447,12 @@ export default function PequenosGruposScreen() {
 
             {isLeader ? (
               <>
-                <Text style={styles.sectionTitle}>Pedidos para participar</Text>
+                <Text style={styles.sectionTitle}>
+                  Pedidos para participar
+                  {pendingRequests.length
+                    ? ` (${pendingRequests.length})`
+                    : ''}
+                </Text>
                 {pendingRequests.length ? (
                   pendingRequests.map((request) => (
                     <AppCard key={request.id}>
