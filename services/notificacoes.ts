@@ -134,7 +134,11 @@ export async function sendPushNotification(input: SendNotificationInput) {
     });
   }
 
-  if (invalidRefs.length) {
+  if (
+    invalidRefs.length &&
+    senderData?.ativo === true &&
+    senderData.perfil === 'ADMINISTRADOR'
+  ) {
     const batch = writeBatch(db);
     invalidRefs.forEach(({ ref }) => batch.update(ref, { ativo: false, atualizadoEm: serverTimestamp() }));
     await batch.commit();

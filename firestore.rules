@@ -35,14 +35,6 @@ service cloud.firestore {
       return hasFuncao('SECRETARIA');
     }
 
-    function isRecepcao() {
-      return hasUserProfile()
-        && currentUser().ministerios is list
-        && get(/databases/$(database)/documents/config/app).data.recepcaoMinisterioId
-          == 'acolhimento'
-        && currentUser().ministerios.hasAny(['acolhimento']);
-    }
-
     function isPastoral() {
       return hasFuncao('PASTORAL');
     }
@@ -778,7 +770,7 @@ service cloud.firestore {
         && validPushToken(request.resource.data)
         && request.resource.data.ativo == true
       );
-      allow update: if isAdmin() || isSecretaria() || (
+      allow update: if isAdmin() || (
         ownsToken(request.resource.data)
         && validPushToken(request.resource.data)
       );
@@ -788,10 +780,8 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow get: if (signedIn() && request.auth.uid == uid)
-        || isMemberViewer()
-        || (isRecepcao() && resource.data.perfil == 'VISITANTE');
-      allow list: if isMemberViewer()
-        || (isRecepcao() && resource.data.perfil == 'VISITANTE');
+        || isMemberViewer();
+      allow list: if isMemberViewer();
       allow create: if signedIn()
         && request.auth.uid == uid
         && !exists(deletionRequestPath(uid))
@@ -1005,20 +995,68 @@ service cloud.firestore {
         allow get, list: if isCareStaff()
           || isLiderDoPg(grupoId)
           || isSmallGroupParticipant(grupoId);
-        allow create, update: if (isCareStaff() || isLiderDoPg(grupoId))
+        allow create: if (
+            isCareStaff()
+            || (
+              isLiderDoPg(grupoId)
+              && hasApprovedPgRequest(uid, grupoId)
+            )
+          )
           && uid is string
+          && request.resource.data.keys().hasOnly(['nome', 'fotoUrl'])
+          && request.resource.data.keys().hasAll(['nome', 'fotoUrl'])
           && request.resource.data.nome is string
           && request.resource.data.nome.size() <= 120
           && request.resource.data.fotoUrl is string;
-        allow delete: if (isCareStaff() || isLiderDoPg(grupoId)) && uid is string;
+        allow update: if (
+            isCareStaff()
+            || (
+              isLiderDoPg(grupoId)
+              && hasApprovedPgRequest(uid, grupoId)
+            )
+          )
+          && uid is string
+          && request.resource.data.keys().hasOnly(['nome', 'fotoUrl'])
+          && request.resource.data.keys().hasAll(['nome', 'fotoUrl'])
+          && request.resource.data.nome is string
+          && request.resource.data.nome.size() <= 120
+          && request.resource.data.fotoUrl is string;
+        allow delete: if (
+            isCareStaff()
+            || isLiderDoPg(grupoId)
+          )
+          && uid is string;
       }
 
       match /participantesMeta/{uid} {
         allow get, list: if isCareStaff();
-        allow create, update: if (isCareStaff() || isLiderDoPg(grupoId))
+        allow create: if (
+            isCareStaff()
+            || (
+              isLiderDoPg(grupoId)
+              && hasApprovedPgRequest(uid, grupoId)
+            )
+          )
           && uid is string
+          && request.resource.data.keys().hasOnly(['ingressoEm'])
+          && request.resource.data.keys().hasAll(['ingressoEm'])
           && request.resource.data.ingressoEm == request.time;
-        allow delete: if (isCareStaff() || isLiderDoPg(grupoId)) && uid is string;
+        allow update: if (
+            isCareStaff()
+            || (
+              isLiderDoPg(grupoId)
+              && hasApprovedPgRequest(uid, grupoId)
+            )
+          )
+          && uid is string
+          && request.resource.data.keys().hasOnly(['ingressoEm'])
+          && request.resource.data.keys().hasAll(['ingressoEm'])
+          && request.resource.data.ingressoEm == request.time;
+        allow delete: if (
+            isCareStaff()
+            || isLiderDoPg(grupoId)
+          )
+          && uid is string;
       }
     }
 
