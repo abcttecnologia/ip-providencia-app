@@ -289,95 +289,60 @@ export async function saveSmallGroupLeaders(
   await batch.commit();
 }
 
-export async function configureDefaultSmallGroups(
-  existingGroups: SmallGroup[],
+export async function saveSmallGroup(
+  group: Omit<SmallGroup, "id" | "criadoEm" | "atualizadoEm">,
+  groupId: string | null,
   actor: PortalActor,
 ) {
-  if (actor.perfil !== "ADMINISTRADOR") {
-    throw new Error("Somente a administração pode configurar os PGs oficiais.");
+  if (
+    actor.perfil !== "ADMINISTRADOR" &&
+    !actor.funcoes?.includes("SECRETARIA")
+  ) {
+    throw new Error("Somente a administração ou a secretaria pode salvar PGs.");
+  }
+  if (!group.nome.trim() || !group.regiao.trim()) {
+    throw new Error("Informe o nome e a região do Pequeno Grupo.");
+  }
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(group.horario ?? "")) {
+    throw new Error("O horário deve estar no formato HH:mm.");
+  }
+  if (group.diaSemana < 0 || group.diaSemana > 6) {
+    throw new Error("Selecione um dia válido.");
+  }
+  if (new Set(group.liderUids ?? []).size !== (group.liderUids ?? []).length) {
+    throw new Error("Selecione líderes diferentes.");
   }
 
-  const defaults = [
-    {
-      nome: "Asa Norte",
-      bairro: "Asa Norte",
-      lideres: "Pr. Miguel e Asenath",
-      diaSemana: "Quarta-feira",
-      horario: "19h30",
-    },
-    {
-      nome: "Asa Sul",
-      bairro: "Asa Sul",
-      lideres: "Rev. Quaresma e Elciane",
-      diaSemana: "Quarta-feira",
-      horario: "19h30",
-    },
-    {
-      nome: "Guará",
-      bairro: "Guará",
-      lideres: "Kaio e Lara",
-      diaSemana: "Quarta-feira",
-      horario: "19h30",
-    },
-    {
-      nome: "Lago Norte",
-      bairro: "Lago Norte",
-      lideres: "Thiago e Adriana",
-      diaSemana: "Sexta-feira",
-      horario: "19h30",
-    },
-  ];
-
+  const groupRef = groupId
+    ? doc(db, "pequenosGrupos", groupId)
+    : doc(collection(db, "pequenosGrupos"));
   const batch = writeBatch(db);
-  const usedGroupIds = new Set<string>();
-  for (const group of defaults) {
-    const key = normalizePgLocation(group.nome);
-    const matches = existingGroups.filter((candidate) =>
-      [candidate.nome, candidate.bairro]
-        .filter((value): value is string => Boolean(value))
-        .some((value) => normalizePgLocation(value).includes(key)),
-    );
-    if (matches.length > 1 || (matches[0] && usedGroupIds.has(matches[0].id))) {
-      throw new Error(
-        `Há mais de um cadastro correspondente ao PG ${group.nome}. Resolva os duplicados antes da configuração.`,
-      );
-    }
-
-    const existing = matches[0];
-    const groupRef = existing
-      ? doc(db, "pequenosGrupos", existing.id)
-      : doc(collection(db, "pequenosGrupos"));
-    usedGroupIds.add(groupRef.id);
-    batch.set(
-      groupRef,
-      {
-        ...group,
-        ativo: true,
-        atualizadoEm: serverTimestamp(),
-        ...(existing ? {} : { criadoEm: serverTimestamp() }),
-      },
-      { merge: true },
-    );
-    batch.set(
-      doc(collection(db, "auditoria")),
-      auditRecord(
-        existing ? "editar" : "criar",
-        "pequenosGrupos",
-        groupRef.id,
-        actor,
-      ),
-    );
-  }
-
+  const values = {
+    nome: group.nome.trim(),
+    regiao: group.regiao.trim(),
+    lideres: group.lideres?.trim() ?? "",
+    liderUids: group.liderUids ?? [],
+    diaSemana: group.diaSemana,
+    horario: group.horario,
+    palavraChaveAgenda: group.palavraChaveAgenda.trim(),
+    ativo: group.ativo,
+  };
+  batch.set(
+    groupRef,
+    groupId
+      ? { ...values, atualizadoEm: serverTimestamp() }
+      : {
+          ...values,
+          criadoEm: serverTimestamp(),
+          atualizadoEm: serverTimestamp(),
+        },
+    { merge: true },
+  );
+  batch.set(
+    doc(collection(db, "auditoria")),
+    auditRecord(groupId ? "editar" : "criar", "pequenosGrupos", groupRef.id, actor),
+  );
   await batch.commit();
-}
-
-function normalizePgLocation(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
 }
 
 export async function updatePgRequest(
@@ -422,7 +387,7 @@ export async function updatePgRequest(
       const currentUser = userSnapshot.data();
       if (
         currentUser.ativo !== true ||
-        currentUser.perfil !== "MEMBRO" ||
+        !["VISITANTE", "MEMBRO", "ADMINISTRADOR"].includes(currentUser.perfil) ||
         (typeof currentUser.pequenoGrupoId === "string" &&
           currentUser.pequenoGrupoId !== "")
       ) {

@@ -56,7 +56,7 @@ export async function getMeuPequenoGrupo(): Promise<PequenoGrupo | null> {
   const user = await getUser(uid);
   if (!user?.ativo) return null;
 
-  if (user.perfil === 'MEMBRO' && user.pequenoGrupoId) {
+  if (user.pequenoGrupoId) {
     const snapshot = await getDoc(doc(db, 'pequenosGrupos', user.pequenoGrupoId));
     if (snapshot.exists()) {
       return mapPequenoGrupo(
@@ -108,13 +108,16 @@ export async function getMyPgRequests(): Promise<SolicitacaoPg[]> {
     );
 }
 
-export async function requestPgInformation(groupId: string) {
+export async function requestPgParticipation(groupId: string) {
   const uid = auth.currentUser?.uid;
-  if (!uid) throw new Error('Entre na sua conta para pedir informações.');
+  if (!uid) throw new Error('Entre na sua conta para participar.');
 
   const user = await getUser(uid);
-  if (!user?.ativo || user.perfil !== 'MEMBRO') {
-    throw new Error('O pedido de informações está disponível para membros cadastrados.');
+  if (
+    !user?.ativo ||
+    !['VISITANTE', 'MEMBRO', 'ADMINISTRADOR'].includes(user.perfil)
+  ) {
+    throw new Error('Sua conta não pode solicitar participação neste momento.');
   }
   if (user.pequenoGrupoId) {
     throw new Error('Você já participa de um Pequeno Grupo.');
@@ -125,17 +128,17 @@ export async function requestPgInformation(groupId: string) {
     throw new Error('Este Pequeno Grupo não está disponível.');
   }
 
-  const requestId = `${groupId}_${uid}_informacoes`;
+  const requestId = `${groupId}_${uid}`;
   const requestRef = doc(db, 'solicitacoesPg', requestId);
   if ((await getDoc(requestRef)).exists()) {
-    throw new Error('Você já pediu informações sobre este grupo.');
+    throw new Error('Você já enviou um pedido para este grupo.');
   }
 
   await setDoc(requestRef, {
     uid,
     nome: user.nome,
     grupoId: groupId,
-    tipo: 'informacoes',
+    tipo: 'participacao',
     status: 'pendente',
     criadoEm: serverTimestamp(),
     atualizadoEm: serverTimestamp(),

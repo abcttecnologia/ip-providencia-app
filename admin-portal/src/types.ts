@@ -107,10 +107,12 @@ export interface SmallGroup {
   id: string;
   nome: string;
   descricao?: string;
+  regiao: string;
   bairro?: string;
-  diaSemana?: string;
+  diaSemana: number;
   horario?: string;
   local?: string;
+  palavraChaveAgenda: string;
   lideres?: string;
   liderUids?: string[];
   ativo: boolean;

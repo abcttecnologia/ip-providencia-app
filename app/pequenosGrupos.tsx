@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { router } from 'expo-router';
 import {
   Alert,
   Image,
-  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -28,7 +28,7 @@ import {
   getMyPgRequests,
   getPequenosGrupos,
   removePgParticipant,
-  requestPgInformation,
+  requestPgParticipation,
   savePgAttendance,
   updatePgRequestStatus,
 } from '../services/pequenosGrupos';
@@ -48,7 +48,7 @@ function nextMeetingLabel(
   group: PequenoGrupo,
   events: GoogleCalendarEvent[],
 ) {
-  const searchTerms = [group.nome, group.bairro]
+  const searchTerms = [group.palavraChaveAgenda, group.nome, group.regiao, group.bairro]
     .filter((term): term is string => Boolean(term))
     .map(normalizeText)
     .filter((term) => term.length >= 3);
@@ -79,7 +79,9 @@ function nextMeetingLabel(
       : ''}`;
   }
 
-  if (!group.diaSemana) return 'Próximo encontro: data a combinar';
+  if (group.diaSemana === undefined || group.diaSemana === null) {
+    return 'Próximo encontro: data a combinar';
+  }
 
   const weekdays = [
     'domingo',
@@ -90,13 +92,19 @@ function nextMeetingLabel(
     'sexta',
     'sabado',
   ];
-  const normalizedDay = group.diaSemana
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-  const targetDay = weekdays.findIndex((day) => normalizedDay.startsWith(day));
-  if (targetDay < 0) {
-    return `Encontro: ${group.diaSemana}${group.horario ? ` • ${group.horario}` : ''}`;
+  const dayValue = group.diaSemana;
+  const targetDay =
+    typeof dayValue === 'number'
+      ? dayValue
+      : weekdays.findIndex((day) =>
+          dayValue
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .startsWith(day),
+        );
+  if (targetDay < 0 || targetDay > 6) {
+    return `Encontro: ${String(group.diaSemana)}${group.horario ? ` • ${group.horario}` : ''}`;
   }
 
   const nextDate = new Date();
@@ -219,18 +227,18 @@ export default function PequenosGruposScreen() {
     void Promise.resolve().then(loadGroups);
   }, [profileLoading, loadGroups]);
 
-  async function handleInformationRequest(group: PequenoGrupo) {
+  async function handleParticipationRequest(group: PequenoGrupo) {
     setBusyId(group.id);
     try {
-      await requestPgInformation(group.id);
+      await requestPgParticipation(group.id);
       await loadGroups();
       Alert.alert(
         'Pedido enviado',
-        'Os líderes do grupo receberam seu pedido de informações.',
+        'Pedido enviado. Aguarde o contato do líder.',
       );
     } catch (requestError) {
       Alert.alert(
-        'Não foi possível pedir informações',
+        'Não foi possível enviar o pedido',
         requestError instanceof Error
           ? requestError.message
           : 'Tente novamente mais tarde.',
@@ -338,10 +346,13 @@ export default function PequenosGruposScreen() {
     Boolean(myGroup && user?.uid && myGroup.liderUids?.includes(user.uid));
   const requestByGroup = new Map(
     myRequests
-      .filter((request) => request.tipo === 'informacoes')
+      .filter((request) => request.tipo !== 'informacoes')
       .map((request) => [request.grupoId, request]),
   );
-  const canRequest = user?.ativo && user.perfil === 'MEMBRO' && !user.pequenoGrupoId;
+  const canRequest =
+    user?.ativo &&
+    ['VISITANTE', 'MEMBRO', 'ADMINISTRADOR'].includes(user.perfil) &&
+    !user.pequenoGrupoId;
 
   return (
     <Screen>
@@ -521,22 +532,23 @@ export default function PequenosGruposScreen() {
 
         <Text style={styles.sectionTitle}>Encontrar um PG</Text>
         <Text style={styles.intro}>
-          Conheça os Pequenos Grupos ativos e solicite informações pelo app.
+          Conheça os Pequenos Grupos ativos e peça para participar.
         </Text>
         {groups.length ? (
           groups.map((group) => {
             const request = requestByGroup.get(group.id);
             const isMyGroup = myGroup?.id === group.id;
-            const groupLink = request?.linkGrupo;
             return (
               <AppCard key={group.id}>
                 <Text style={styles.groupName}>{group.nome}</Text>
                 {group.descricao ? (
                   <Text style={styles.groupDescription}>{group.descricao}</Text>
                 ) : null}
-                {group.bairro ? <InfoRow label="Bairro" value={group.bairro} /> : null}
-                {group.diaSemana ? (
-                  <InfoRow label="Dia" value={group.diaSemana} />
+                {(group.regiao ?? group.bairro) ? (
+                  <InfoRow label="Região" value={group.regiao ?? group.bairro ?? ''} />
+                ) : null}
+                {group.diaSemana !== undefined ? (
+                  <InfoRow label="Dia" value={String(group.diaSemana)} />
                 ) : null}
                 {group.lideres ? (
                   <InfoRow label="Líderes" value={group.lideres} />
@@ -548,34 +560,8 @@ export default function PequenosGruposScreen() {
                   {nextMeetingLabel(group, calendarEvents)}
                 </Text>
                 {group.local ? <InfoRow label="Local" value={group.local} /> : null}
-                {request?.tipo === 'informacoes' &&
-                request.status === 'respondida' ? (
-                  <View style={styles.infoReply}>
-                    <Text style={styles.infoReplyTitle}>
-                      Informações enviadas pela Secretaria
-                    </Text>
-                    {request.endereco ? (
-                      <InfoRow label="Endereço" value={request.endereco} />
-                    ) : null}
-                    {groupLink ? (
-                      <Pressable
-                        onPress={() => {
-                          void Linking.openURL(groupLink).catch(() =>
-                            Alert.alert(
-                              'Link indisponível',
-                              'Não foi possível abrir o link do grupo.',
-                            ),
-                          );
-                        }}
-                        accessibilityRole="link"
-                      >
-                        <InfoRow label="Link do grupo" value={groupLink} />
-                      </Pressable>
-                    ) : null}
-                    {request.material ? (
-                      <InfoRow label="Material" value={request.material} />
-                    ) : null}
-                  </View>
+                {isMyGroup ? (
+                  <Text style={styles.myGroupBadge}>Meu PG</Text>
                 ) : null}
                 {canRequest && !isMyGroup ? (
                   <View style={styles.saveButton}>
@@ -584,26 +570,29 @@ export default function PequenosGruposScreen() {
                         busyId === group.id
                           ? 'Enviando...'
                           : request?.status === 'pendente'
-                            ? 'Pedido enviado'
-                            : request?.status === 'respondida'
-                              ? 'Informações recebidas'
-                              : 'Quero mais informações'
+                            ? 'Pedido enviado. Aguarde o contato do líder.'
+                            : 'Quero participar'
                       }
-                      onPress={() => void handleInformationRequest(group)}
+                      onPress={() => void handleParticipationRequest(group)}
                       disabled={
                         busyId === group.id ||
-                        request?.status === 'pendente' ||
-                        request?.status === 'respondida'
+                        request?.status === 'pendente'
                       }
                     />
                   </View>
                 ) : !user ? (
-                  <Text style={styles.contactHint}>
-                    Entre na sua conta como membro para solicitar participação.
-                  </Text>
+                  <View style={styles.saveButton}>
+                    <Text style={styles.contactHint}>
+                      Entre na sua conta para participar.
+                    </Text>
+                    <AppButton
+                      title="Entrar"
+                      onPress={() => router.push('/login')}
+                    />
+                  </View>
                 ) : !canRequest && !isMyGroup ? (
                   <Text style={styles.contactHint}>
-                    A solicitação de informações está disponível para membros sem vínculo a outro PG.
+                    Você já está vinculado a um Pequeno Grupo.
                   </Text>
                 ) : null}
               </AppCard>
@@ -681,6 +670,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginTop: 12,
+  },
+  myGroupBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E8F3EA',
+    borderRadius: 8,
+    color: '#1E5631',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   replyInput: {
     backgroundColor: '#F7F9F7',

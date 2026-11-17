@@ -88,10 +88,12 @@ export interface PequenoGrupo {
   id: string;
   nome: string;
   descricao?: string;
+  regiao?: string;
   bairro?: string;
-  diaSemana?: string;
+  diaSemana?: number | string;
   horario?: string;
   local?: string;
+  palavraChaveAgenda?: string;
   liderId?: string | null;
   lideres?: string;
   liderUids?: string[];

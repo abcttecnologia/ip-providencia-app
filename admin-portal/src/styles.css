@@ -255,6 +255,7 @@ tbody tr:hover { background: #fcfdfc; }
 .family-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
 .family-card { padding: 16px; border: 1px solid #e9ede9; border-radius: 10px; background: #fff; box-shadow: var(--shadow); }
 .family-card-top { display: flex; align-items: center; justify-content: space-between; }
+.pg-card-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .family-icon { display: grid; width: 36px; height: 36px; place-items: center; color: #487b60; border-radius: 10px; background: #e9f2ec; }
 .family-card h2 { margin: 14px 0 4px; color: #34463d; font-family: Manrope, sans-serif; font-size: 14px; font-weight: 800; }
 .family-card > p { margin: 0; color: #89958e; font-size: 9px; }
@@ -347,6 +348,7 @@ tbody tr:hover { background: #fcfdfc; }
 .modal-heading p { margin: 0; color: #829087; font-size: 10px; line-height: 1.5; }
 .portal-form { display: grid; gap: 14px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.member-search { width: 100%; min-height: 36px; padding: 8px 10px; color: #394b41; border: 1px solid #e0e8e2; border-radius: 7px; outline: 0; background: #fff; font-size: 10px; }
 .field { display: grid; min-width: 0; gap: 6px; color: #62736a; font-size: 9px; font-weight: 600; }
 .field-span { grid-column: 1 / -1; }
 .field input, .field select, .field textarea { width: 100%; min-height: 36px; padding: 8px 10px; color: #394b41; border: 1px solid #e0e8e2; border-radius: 7px; outline: 0; background: #fff; font-size: 10px; font-weight: 400; }

@@ -60,6 +60,12 @@ service cloud.firestore {
       return isAdmin() || isSecretaria() || isPastoral();
     }
 
+    function isActivePgUser() {
+      return signedIn()
+        && currentUser().ativo == true
+        && currentUser().perfil in ['VISITANTE', 'MEMBRO', 'ADMINISTRADOR'];
+    }
+
     function canManageContent() {
       return isAdmin() || isSecretaria();
     }
@@ -527,6 +533,54 @@ service cloud.firestore {
         && data.atualizadoEm == request.time;
     }
 
+    function validSmallGroup(data) {
+      return data.keys().hasAll([
+          'nome',
+          'regiao',
+          'lideres',
+          'liderUids',
+          'diaSemana',
+          'horario',
+          'palavraChaveAgenda',
+          'ativo',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.keys().hasOnly([
+          'nome',
+          'regiao',
+          'lideres',
+          'liderUids',
+          'diaSemana',
+          'horario',
+          'palavraChaveAgenda',
+          'ativo',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && data.nome is string
+        && data.nome.size() > 0
+        && data.nome.size() <= 120
+        && data.regiao is string
+        && data.regiao.size() > 0
+        && data.regiao.size() <= 120
+        && data.lideres is string
+        && data.lideres.size() <= 240
+        && data.liderUids is list
+        && data.liderUids.size() <= 20
+        && data.diaSemana is int
+        && data.diaSemana >= 0
+        && data.diaSemana <= 6
+        && data.horario is string
+        && data.horario.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+        && data.palavraChaveAgenda is string
+        && data.palavraChaveAgenda.size() > 0
+        && data.palavraChaveAgenda.size() <= 120
+        && data.ativo is bool
+        && data.criadoEm is timestamp
+        && data.atualizadoEm is timestamp;
+    }
+
     function validPgAttendance(data, groupId, date) {
       return data.keys().hasAll([
           'grupoId',
@@ -809,7 +863,7 @@ service cloud.firestore {
                 || resource.data.pequenoGrupoId == null
               )
               && resource.data.ativo == true
-              && resource.data.perfil == 'MEMBRO'
+              && resource.data.perfil in ['VISITANTE', 'MEMBRO', 'ADMINISTRADOR']
               && isLiderDoPg(request.resource.data.pequenoGrupoId)
               && hasApprovedPgRequest(uid, request.resource.data.pequenoGrupoId)
             )
@@ -838,17 +892,15 @@ service cloud.firestore {
       allow get, list: if isCareStaff()
         || resource.data.ativo == true
         || belongsToSmallGroup(grupoId);
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin()
-        || (
-          isSecretaria()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'liderUids',
-            'atualizadoEm'
-          ])
-          && request.resource.data.liderUids is list
-          && request.resource.data.atualizadoEm == request.time
-        );
+      allow create: if (isAdmin() || isSecretaria())
+        && validSmallGroup(request.resource.data)
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if (isAdmin() || isSecretaria())
+        && validSmallGroup(request.resource.data)
+        && request.resource.data.criadoEm == resource.data.criadoEm
+        && request.resource.data.atualizadoEm == request.time;
+      allow delete: if isAdmin();
 
       match /participantes/{uid} {
         allow get, list: if isCareStaff()
@@ -867,7 +919,7 @@ service cloud.firestore {
       allow get, list: if isCareStaff()
         || (signedIn() && resource.data.uid == request.auth.uid)
         || isLiderDoPg(resource.data.grupoId);
-      allow create: if isMember()
+      allow create: if isActivePgUser()
         && request.resource.data.grupoId is string
         && exists(smallGroupPath(request.resource.data.grupoId))
         && get(smallGroupPath(request.resource.data.grupoId)).data.ativo == true

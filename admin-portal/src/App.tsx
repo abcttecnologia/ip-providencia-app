@@ -36,12 +36,12 @@ import {
   anonymizePastoralRecords,
   addMemberHistory,
   completeDeletionRequest,
-  configureDefaultSmallGroups,
   loadPortalData,
   respondToPrayerRequest,
   respondToPgInformationRequest,
   saveFamily,
   saveFollowUp,
+  saveSmallGroup,
   saveSmallGroupLeaders,
   saveVisit,
   signOutPortal,
@@ -89,6 +89,7 @@ type ModalState =
   | { kind: "history"; history: MemberHistory | null }
   | { kind: "visit"; visit: PastoralVisit | null }
   | { kind: "followup"; followup: FollowUp | null }
+  | { kind: "smallGroup"; group: SmallGroup | null }
   | { kind: "leaders"; group: SmallGroup }
   | null;
 
@@ -813,17 +814,8 @@ function AdminPortal({
               data={data}
               search={query}
               canManagePg={canManagePg}
-              isAdministrator={isAdministrator}
-              onConfigure={() =>
-                runActionSafely(
-                  () =>
-                    configureDefaultSmallGroups(
-                      data.pequenosGrupos,
-                      portalActor(profile),
-                    ),
-                  "Os quatro PGs foram configurados. Vincule as contas dos líderes para ativar aprovações e notificações.",
-                )
-              }
+              onNewGroup={() => setModal({ kind: "smallGroup", group: null })}
+              onEditGroup={(group) => setModal({ kind: "smallGroup", group })}
               onEditLeaders={(group) => setModal({ kind: "leaders", group })}
             />
           ) : null}
@@ -986,6 +978,24 @@ function AdminPortal({
                       portalActor(profile),
                     ),
                   "Líderes do Pequeno Grupo atualizados.",
+                )
+              }
+            />
+          ) : null}
+          {modal.kind === "smallGroup" ? (
+            <SmallGroupForm
+              group={modal.group}
+              data={data}
+              onCancel={() => setModal(null)}
+              onSave={(group) =>
+                runAction(
+                  () =>
+                    saveSmallGroup(
+                      group,
+                      modal.group?.id ?? null,
+                      portalActor(profile),
+                    ),
+                  modal.group ? "Pequeno Grupo atualizado." : "Pequeno Grupo criado.",
                 )
               }
             />
@@ -1631,15 +1641,15 @@ function SmallGroupsPage({
   data,
   search,
   canManagePg,
-  isAdministrator,
-  onConfigure,
+  onNewGroup,
+  onEditGroup,
   onEditLeaders,
 }: {
   data: PortalData;
   search: string;
   canManagePg: boolean;
-  isAdministrator: boolean;
-  onConfigure: () => void;
+  onNewGroup: () => void;
+  onEditGroup: (group: SmallGroup) => void;
   onEditLeaders: (group: SmallGroup) => void;
 }) {
   const searchTerm = search.toLocaleLowerCase("pt-BR");
@@ -1647,7 +1657,7 @@ function SmallGroupsPage({
     const leaderNames = (group.liderUids ?? [])
       .map((uid) => data.pessoas.find((person) => person.uid === uid)?.nome ?? "")
       .join(" ");
-    return `${group.nome} ${group.bairro ?? ""} ${group.lideres ?? ""} ${leaderNames}`
+    return `${group.nome} ${group.regiao ?? group.bairro ?? ""} ${group.lideres ?? ""} ${leaderNames}`
       .toLocaleLowerCase("pt-BR")
       .includes(searchTerm);
   });
@@ -1655,18 +1665,14 @@ function SmallGroupsPage({
 
   return (
     <>
-      {isAdministrator ? (
+      {canManagePg ? (
         <section className="panel pg-setup-banner">
           <div>
-            <h2>PGs oficiais</h2>
-            <p>
-              Configura Asa Norte, Asa Sul, Guará e Lago Norte com os dias,
-              horários e líderes informados. Depois, vincule as contas dos
-              líderes em cada grupo.
-            </p>
+            <h2>Cadastro de Pequenos Grupos</h2>
+            <p>Cadastre grupos, horários, palavra-chave da agenda e líderes.</p>
           </div>
-          <button className="button button-primary" onClick={onConfigure}>
-            Configurar os quatro PGs
+          <button className="button button-primary" onClick={onNewGroup}>
+            Novo grupo
           </button>
         </section>
       ) : null}
@@ -1692,16 +1698,24 @@ function SmallGroupsPage({
               <div className="family-card-top">
                 <div className="family-icon"><Users size={20} /></div>
                 {canManagePg ? (
-                  <button
-                    className="button button-small"
-                    onClick={() => onEditLeaders(group)}
-                  >
-                    Gerenciar líderes
-                  </button>
+                  <div className="pg-card-actions">
+                    <button
+                      className="button button-small"
+                      onClick={() => onEditGroup(group)}
+                    >
+                      Editar grupo
+                    </button>
+                    <button
+                      className="button button-small"
+                      onClick={() => onEditLeaders(group)}
+                    >
+                      Líderes
+                    </button>
+                  </div>
                 ) : null}
               </div>
               <h2>{group.nome}</h2>
-              <p>{group.ativo ? "Grupo ativo" : "Grupo inativo"}</p>
+              <p>{group.regiao ?? group.bairro ?? "Sem região"} · {group.ativo ? "Grupo ativo" : "Grupo inativo"}</p>
               <div className="report-lines">
                 <div><span>Encontros registrados</span><strong>{records.length}</strong></div>
                 <div>
@@ -2493,6 +2507,160 @@ function FamilyForm({
   );
 }
 
+function SmallGroupForm({
+  group,
+  data,
+  onCancel,
+  onSave,
+}: {
+  group: SmallGroup | null;
+  data: PortalData;
+  onCancel: () => void;
+  onSave: (
+    value: Omit<SmallGroup, "id" | "criadoEm" | "atualizadoEm">,
+  ) => Promise<void>;
+}) {
+  const [nome, setNome] = useState(group?.nome ?? "");
+  const [regiao, setRegiao] = useState(group?.regiao ?? group?.bairro ?? "");
+  const [lideres, setLideres] = useState(group?.lideres ?? "");
+  const [leaderUids, setLeaderUids] = useState(group?.liderUids ?? []);
+  const [diaSemana, setDiaSemana] = useState(String(group?.diaSemana ?? 3));
+  const [horario, setHorario] = useState(group?.horario ?? "19:30");
+  const [palavraChaveAgenda, setPalavraChaveAgenda] = useState(
+    group?.palavraChaveAgenda ?? group?.nome ?? "",
+  );
+  const [ativo, setAtivo] = useState(group?.ativo ?? true);
+  const [leaderSearch, setLeaderSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const people = data.pessoas
+    .filter((person) => person.ativo)
+    .filter((person) =>
+      `${person.nome} ${person.email}`
+        .toLocaleLowerCase("pt-BR")
+        .includes(leaderSearch.toLocaleLowerCase("pt-BR")),
+    )
+    .sort((left, right) => left.nome.localeCompare(right.nome));
+
+  function toggleLeader(uid: string) {
+    setLeaderUids((current) =>
+      current.includes(uid)
+        ? current.filter((value) => value !== uid)
+        : [...current, uid],
+    );
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({
+        nome,
+        regiao,
+        lideres,
+        liderUids: leaderUids,
+        diaSemana: Number(diaSemana),
+        horario,
+        palavraChaveAgenda,
+        ativo,
+      });
+    } catch (saveError) {
+      console.error("Falha ao salvar Pequeno Grupo:", saveError);
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Não foi possível salvar o Pequeno Grupo.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="portal-form" onSubmit={(event) => void submit(event)}>
+      <ModalHeading
+        eyebrow="PEQUENO GRUPO"
+        title={group ? "Editar grupo" : "Novo grupo"}
+        description="Configure os dados usados no app e na agenda da igreja."
+      />
+      <div className="form-grid">
+        <label className="field">
+          <span>Nome</span>
+          <input value={nome} onChange={(event) => setNome(event.target.value)} maxLength={120} required />
+        </label>
+        <label className="field">
+          <span>Região</span>
+          <input value={regiao} onChange={(event) => setRegiao(event.target.value)} maxLength={120} required />
+        </label>
+        <label className="field">
+          <span>Líderes (texto)</span>
+          <input value={lideres} onChange={(event) => setLideres(event.target.value)} maxLength={240} />
+        </label>
+        <label className="field">
+          <span>Dia da semana</span>
+          <select value={diaSemana} onChange={(event) => setDiaSemana(event.target.value)}>
+            <option value="0">Domingo</option>
+            <option value="1">Segunda</option>
+            <option value="2">Terça</option>
+            <option value="3">Quarta</option>
+            <option value="4">Quinta</option>
+            <option value="5">Sexta</option>
+            <option value="6">Sábado</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Horário</span>
+          <input type="time" value={horario} onChange={(event) => setHorario(event.target.value)} required />
+        </label>
+        <label className="field">
+          <span>Palavra-chave da agenda</span>
+          <input value={palavraChaveAgenda} onChange={(event) => setPalavraChaveAgenda(event.target.value)} maxLength={120} required />
+        </label>
+      </div>
+      <label className="field-check">
+        <input type="checkbox" checked={ativo} onChange={(event) => setAtivo(event.target.checked)} />
+        Grupo ativo
+      </label>
+      <div className="member-picker-heading">
+        <strong>Contas dos líderes</strong>
+        <span>{leaderUids.length} selecionada(s)</span>
+      </div>
+      <input
+        className="member-search"
+        value={leaderSearch}
+        onChange={(event) => setLeaderSearch(event.target.value)}
+        placeholder="Buscar por nome ou e-mail"
+        aria-label="Buscar contas de líderes"
+      />
+      <div className="member-picker">
+        {people.map((person) => (
+          <label className="member-option" key={person.uid}>
+            <input
+              type="checkbox"
+              checked={leaderUids.includes(person.uid)}
+              onChange={() => toggleLeader(person.uid)}
+            />
+            <PersonAvatar person={person} small />
+            <span className="member-option-copy">
+              <strong>{person.nome}</strong>
+              <small>{person.email}</small>
+            </span>
+          </label>
+        ))}
+        {!people.length ? <p className="muted">Nenhuma conta encontrada.</p> : null}
+      </div>
+      {error ? <p className="form-error">{error}</p> : null}
+      <ModalActions
+        onCancel={onCancel}
+        saving={saving}
+        submitLabel={group ? "Salvar grupo" : "Criar grupo"}
+      />
+    </form>
+  );
+}
+
 function GroupLeadersForm({
   group,
   data,
@@ -2508,7 +2676,7 @@ function GroupLeadersForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const members = data.pessoas
-    .filter((person) => person.ativo && person.perfil === "MEMBRO")
+    .filter((person) => person.ativo)
     .sort((left, right) => left.nome.localeCompare(right.nome));
 
   function toggleLeader(uid: string) {
