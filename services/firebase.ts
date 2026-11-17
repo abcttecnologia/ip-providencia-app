@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import {
   getAuth,
   initializeAuth,
@@ -37,6 +38,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 function initializeFirebaseAuth() {
+  if (Platform.OS === 'web') {
+    return getAuth(app);
+  }
+
   try {
     return initializeAuth(app, {
       persistence: getReactNativePersistence(AsyncStorage),
