@@ -141,6 +141,13 @@ service cloud.firestore {
 
     function validOptionalUserFields(data) {
       return (
+          !data.keys().hasAny(['nomeBusca'])
+          || (
+            data.nomeBusca is string
+            && data.nomeBusca.size() <= 120
+          )
+        )
+        && (
           !data.keys().hasAny(['telefone'])
           || data.telefone is string
         )
@@ -806,6 +813,7 @@ service cloud.firestore {
           'uid',
           'email',
           'nome',
+          'nomeBusca',
           'perfil',
           'ativo',
           'ministerios',
@@ -817,6 +825,7 @@ service cloud.firestore {
           'uid',
           'email',
           'nome',
+          'nomeBusca',
           'perfil',
           'ativo',
           'ministerios',
@@ -829,6 +838,8 @@ service cloud.firestore {
         && request.resource.data.nome is string
         && request.resource.data.nome.size() > 0
         && request.resource.data.nome.size() <= 120
+        && request.resource.data.nomeBusca is string
+        && request.resource.data.nomeBusca.size() <= 120
         && request.resource.data.perfil == 'VISITANTE'
         && request.resource.data.ativo == true
         && request.resource.data.ministerios is list
@@ -841,6 +852,7 @@ service cloud.firestore {
           && request.auth.uid == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'nome',
+            'nomeBusca',
             'telefone',
             'endereco',
             'dataNascimento',
@@ -864,6 +876,7 @@ service cloud.firestore {
           && request.auth.uid != uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'nome',
+            'nomeBusca',
             'telefone',
             'endereco',
             'dataNascimento',

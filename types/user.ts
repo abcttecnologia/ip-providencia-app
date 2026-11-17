@@ -17,6 +17,7 @@ export interface LgpdConsent {
 export interface AppUser {
   uid: string;
   nome: string;
+  nomeBusca?: string;
   email: string;
   telefone?: string;
   foto?: string;

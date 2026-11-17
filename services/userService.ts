@@ -14,6 +14,7 @@ import type {
   UserPersonalUpdate,
 } from "../types/user";
 import { auth, db } from "./firebase";
+import { normalizeSearchName } from "./search";
 
 export interface AccessOption {
   id: string;
@@ -54,6 +55,7 @@ export async function createUser(
     uid: user.uid,
     email: user.email,
     nome: user.nome,
+    nomeBusca: normalizeSearchName(user.nome),
     perfil: "VISITANTE",
     ativo: true,
     ministerios: [],
@@ -131,6 +133,9 @@ export async function updateOwnProfile(
 ) {
   await updateDoc(doc(db, "users", uid), {
     ...changes,
+    ...(typeof changes.nome === "string"
+      ? { nomeBusca: normalizeSearchName(changes.nome) }
+      : {}),
     atualizadoEm: serverTimestamp(),
   });
 }

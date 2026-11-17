@@ -18,6 +18,7 @@ export type MinistryType = "orgao" | "sociedade" | "ministerio";
 export interface Person {
   uid: string;
   nome: string;
+  nomeBusca?: string;
   email: string;
   telefone?: string;
   fotoUrl?: string;

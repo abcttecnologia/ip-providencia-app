@@ -752,6 +752,11 @@ export async function updatePerson(
     };
     if (actor.funcoes?.includes("SECRETARIA")) {
       updates.nome = changes.nome;
+      updates.nomeBusca = changes.nome
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLocaleLowerCase("pt-BR")
+        .trim();
       updates.telefone = changes.telefone;
       updates.endereco = changes.endereco;
       updates.dataNascimento = changes.dataNascimento;

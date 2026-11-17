@@ -7,7 +7,7 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import {
   Activity,
   AlertTriangle,
@@ -317,6 +317,24 @@ function App() {
         const currentProfile = profileSnapshot.exists()
           ? ({ ...profileSnapshot.data(), uid: currentUser.uid } as Person)
           : null;
+        if (
+          currentProfile &&
+          typeof currentProfile.nomeBusca !== "string"
+        ) {
+          await updateDoc(
+            doc(db, "users", currentUser.uid),
+            {
+              nomeBusca: currentProfile.nome
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLocaleLowerCase("pt-BR")
+                .trim(),
+              atualizadoEm: serverTimestamp(),
+            },
+          ).catch((error) =>
+            console.warn("Não foi possível indexar o nome no portal:", error),
+          );
+        }
 
         if (!currentProfile || !isPortalStaff(currentProfile)) {
           setAccessError("Esta conta não possui permissão ativa para acessar o portal.");
@@ -436,6 +454,7 @@ function LoginPage({ accessError }: { accessError: string }) {
             uid: credential.user.uid,
             email: credential.user.email ?? email.trim(),
             nome: name.trim(),
+            nomeBusca: name.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim(),
             perfil: "VISITANTE",
             ativo: true,
             ministerios: [],
@@ -1551,7 +1570,8 @@ function PeoplePage({
       return;
     }
     const timer = window.setTimeout(() => {
-      void loadPaginatedCollection<Person>("users", "uid", "nome", "nome", search)
+      const normalizedSearch = search.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim();
+      void loadPaginatedCollection<Person>("users", "uid", "nomeBusca", "nomeBusca", normalizedSearch)
         .then((result) => {
           setPeople(result.items);
           setCursor(result.cursor);
@@ -1569,9 +1589,9 @@ function PeoplePage({
       const result = await loadPaginatedCollection<Person>(
         "users",
         "uid",
-        "nome",
-        "nome",
-        search,
+        "nomeBusca",
+        "nomeBusca",
+        search.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim(),
         cursor,
       );
       setPeople((current) => search.trim()

@@ -4,6 +4,9 @@ import { onAuthStateChanged } from "firebase/auth";
 import type { AppUser } from "../types/user";
 import { auth } from "../services/firebase";
 import { getUser } from "../services/userService";
+import { normalizeSearchName } from "../services/search";
+import { updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { db } from "../services/firebase";
 
 export function useCurrentUserProfile() {
   const [user, setUser] = useState<AppUser | null>(null);
@@ -28,6 +31,14 @@ export function useCurrentUserProfile() {
 
       try {
         const profile = await getUser(firebaseUser.uid);
+        if (profile && typeof profile.nomeBusca !== "string") {
+          void updateDoc(doc(db, "users", firebaseUser.uid), {
+            nomeBusca: normalizeSearchName(profile.nome),
+            atualizadoEm: serverTimestamp(),
+          }).catch((error) =>
+            console.warn("Não foi possível indexar o nome para busca:", error),
+          );
+        }
         if (active) setUser(profile);
       } catch (profileError) {
         console.error("Falha ao carregar o perfil do usuário:", profileError);
